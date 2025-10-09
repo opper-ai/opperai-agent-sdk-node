@@ -2,7 +2,7 @@
 
 Type‑safe, composable agents for Opper AI in TypeScript using: generics, Zod schemas, modular tools, and modern DX.
 
-- Async‑first with cancellation via `AbortSignal`
+- Async‑first
 - Strong typing with Zod runtime validation
 - Opper integration (spans, usage, retries)
 - Hooks for observability and custom behavior
