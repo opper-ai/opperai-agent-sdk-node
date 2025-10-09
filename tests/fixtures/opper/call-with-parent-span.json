@@ -1,0 +1,29 @@
+{
+  "spanId": "a8edd582-e82c-4354-9864-26e97fa15d14",
+  "jsonPayload": {
+    "original_language": "English",
+    "destination_language": "Swedish",
+    "translated_text": "Artificiell intelligens har transformerat många industrier"
+  },
+  "cached": false,
+  "usage": {
+    "output_tokens": 47,
+    "input_tokens": 331,
+    "total_tokens": 378,
+    "output_tokens_details": {
+      "accepted_prediction_tokens": 0,
+      "audio_tokens": 0,
+      "reasoning_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "input_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0
+    }
+  },
+  "cost": {
+    "generation": 0.00142725,
+    "platform": 0.00014272499999999999,
+    "total": 0.001569975
+  }
+}

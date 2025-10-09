@@ -1,0 +1,30 @@
+{
+  "spanId": "1c8ba72d-2800-4c7b-833f-2ad117f211f5",
+  "jsonPayload": {
+    "thoughts": "I identified the number of beds as one king-sized bed and a bed sofa for one, which makes a total of sleeping accommodations for three people. The text clearly mentioned a sea view, so I set that to true. The description was summarized from the details provided in the text.",
+    "beds": 3,
+    "seaview": true,
+    "description": "This is a suite at Grand Hotel that includes two rooms: a master bedroom with a king-sized bed and a bed sofa for one. The suite features a sea view, a large bathroom, and a balcony."
+  },
+  "cached": false,
+  "usage": {
+    "output_tokens": 134,
+    "input_tokens": 378,
+    "total_tokens": 512,
+    "output_tokens_details": {
+      "accepted_prediction_tokens": 0,
+      "audio_tokens": 0,
+      "reasoning_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "input_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0
+    }
+  },
+  "cost": {
+    "generation": 0.0025135,
+    "platform": 0.00025135,
+    "total": 0.00276485
+  }
+}

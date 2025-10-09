@@ -1,0 +1,66 @@
+{
+  "name": "@opperai/agent-ts",
+  "version": "0.0.1",
+  "description": "TypeScript SDK for building Opper AI agents",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opperai/opperai-agent-ts-sdk.git"
+  },
+  "license": "MIT",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration/opper-fixtures.test.ts",
+    "test:integration:live": "vitest run tests/integration/opper-live.test.ts",
+    "typecheck": "tsc --noEmit",
+    "example": "tsx --tsconfig tsconfig.examples.json",
+    "fixtures:generate": "tsx scripts/generate-fixtures.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.19.1",
+    "eventemitter3": "^5.0.1",
+    "opperai": "^3.1.2",
+    "reflect-metadata": "^0.2.2",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^20.17.17",
+    "@typescript-eslint/eslint-plugin": "^8.12.2",
+    "@typescript-eslint/parser": "^8.12.2",
+    "@vitest/coverage-v8": "^2.1.5",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "prettier": "^3.3.2",
+    "tsup": "^8.2.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^2.1.5"
+  },
+  "packageManager": "pnpm@10.18.1+sha512.77a884a165cbba2d8d1c19e3b4880eee6d2fcabd0d879121e282196b80042351d5eb3ca0935fa599da1dc51265cc68816ad2bddd2a2de5ea9fdf92adbec7cd34"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@opperai/agent-examples",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Examples for the Opper Agent TypeScript SDK",
+  "type": "module",
+  "scripts": {
+    "example:math": "tsx 01-math-agent.ts",
+    "example:agent-as-tool": "tsx 02-agent-as-tool.ts"
+  },
+  "keywords": [
+    "opper",
+    "agent",
+    "ai",
+    "examples"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "translation_workflow",
+  "startTime": "2025-10-08T10:30:53.411Z",
+  "id": "631145d4-47ed-4e35-8f28-84e1b7f0cd87",
+  "traceId": "e64c5e92-54a6-46db-904b-d9a28aadf868",
+  "input": "{\"article\": \"The rise of artificial intelligence has transformed many industries.\", \"languages\": [\"Swedish\", \"Danish\", \"Norwegian\"]}",
+  "output": "{\"translations\":[\"Swedish translation\",\"Danish translation\",\"Norwegian translation\"],\"status\":\"completed\"}"
+}

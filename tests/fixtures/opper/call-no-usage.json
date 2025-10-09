@@ -1,0 +1,25 @@
+{
+  "spanId": "d00733d1-6a17-44ba-b992-54fe3ad4d3c9",
+  "message": "Hello! How can I assist you today? 🙂",
+  "cached": false,
+  "usage": {
+    "output_tokens": 11,
+    "input_tokens": 16,
+    "total_tokens": 27,
+    "output_tokens_details": {
+      "accepted_prediction_tokens": 0,
+      "audio_tokens": 0,
+      "reasoning_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "input_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0
+    }
+  },
+  "cost": {
+    "generation": 0.000165,
+    "platform": 0.0000165,
+    "total": 0.0001815
+  }
+}

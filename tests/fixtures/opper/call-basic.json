@@ -1,0 +1,25 @@
+{
+  "spanId": "116f3bb3-4534-442a-a8ef-04ce87eadd44",
+  "message": "Paris",
+  "cached": false,
+  "usage": {
+    "output_tokens": 2,
+    "input_tokens": 32,
+    "total_tokens": 34,
+    "output_tokens_details": {
+      "accepted_prediction_tokens": 0,
+      "audio_tokens": 0,
+      "reasoning_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "input_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0
+    }
+  },
+  "cost": {
+    "generation": 0.00010999999999999999,
+    "platform": 0.000010999999999999998,
+    "total": 0.00012099999999999999
+  }
+}

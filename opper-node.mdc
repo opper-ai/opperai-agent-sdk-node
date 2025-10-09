@@ -1,0 +1,319 @@
+# Overview
+
+Opper is a Unified API that makes it easy to build AI code that is model independent, structured and performant. SDKs are available for Python and TypeScript, and they provide a toolkit to perform various common LLM operations. 
+
+# Key concepts
+
+Here are the key concepts of Opper: 
+
+- A `call` is a primitive but powerful way of interacting with a generative model. It is a structured definition of a task, with clear input and output schemas where schema annotations are used for prompting. Each call has a "name", which allows it to be managed as a function.
+- A `model` is an LLM. A full list of supported LLMs are available at https://docs.opper.ai/capabilities/models. 
+- A `span` is a log of a call. But unlike ordinary logs, a span is built to be able to hold metrics, evaluations and be tied together with other spans to form what is called a trace. A trace is a chain of spans.
+- A `metric` is a data point that you can attach to a span. It is a flexible way to provide feedback on the success of a call from code. It can be used for storing results end user feedback such as thumbs up or down, performance timers or the result of small checks.  
+- A `dataset` is a collection of example outputs that can act as ground truth for success of a task. Dataset entries can be used for testing changes to prompts, alternative models and be used as examples for the model.
+- A `knowledge base` is database equipped with semantic similarity functionality. You can use it to index knowledge and retrieve the semantically relevant parts of it. Good for memory or knowledge applications. 
+
+# Best practices
+
+Here are the best practices for building reliable AI implementations with these primitives: 
+
+- Break up tasks in to steps and implement calls for each step. This helps build an easy to maintain and easy to optimize pipeline.
+- Always define clear schemas for the output, with descriptions for fields to improve the understanding for the model
+- Define a schema for the input with descriptions for fields to improve the understanding for the model, and leave out explanation of this in instructions.
+- Sparingly use natural language instructions, use schemas and field descriptions to define the instructions as much as possible.
+- Always start a trace to have subsequent calls and indexing operations as children of the parent span. This will make it easier to understand the flow of the application in the Opper UI.
+- Leave out the model unless you have a specific reason to do so, model optimization is preferably a later optimization.
+- Perform small and simple evaluations of outputs of calls in code to verify quality or assumptions, to be able to spot issues early
+- Include a field `thoughts` as the first item in the output schema to improve quality of the response. 
+
+# Examples
+
+## Get started
+
+We recommend storing your API key for Opper as an environment variable. The SDKs will automatically try to load the key from the environment variable OPPER_HTTP_BEARER. You can generate API keys at https://platform.opper.ai
+
+```sh
+export OPPER_HTTP_BEARER="<your api key>"
+```
+
+## Making calls to models with schemas
+
+In this example we complete a task to extract structured room information from a text. Note how we define input and output schemas for the task and use field descriptions as the primary means to prompt the model.   
+
+```typescript
+import { Opper } from "opperai";
+
+// Initialize the client - automatically loads API key from OPPER_HTTP_BEARER environment variable
+const opper = new Opper({
+  httpBearer: process.env["OPPER_HTTP_BEARER"] ?? "",
+});
+
+// Define input schema using JSON Schema
+const UnstructuredRoomText = {
+    type: "object",
+    properties: {
+        text: {
+            type: "string",
+            description: "A text containing information about a hotel room",
+        },
+    },
+    required: ["text"],
+};
+
+// Define output schema using JSON Schema
+const StructuredRoom = {
+    type: "object",
+    properties: {
+        thoughts: {
+            type: "string",
+            description:
+                "The thoughts of the model while extracting the room details", // Recommended to always be present
+        },
+        beds: {
+            type: "number",
+            description: "The number of people who can sleep in this room",
+        },
+        seaview: {
+            type: "boolean",
+            description: "Whether the room has a view to the sea",
+        },
+        description: {
+            type: "string",
+            description:
+                "A description of the room and its features. Always starting with 'This room features...'",
+        },
+    },
+    required: ["thoughts", "beds", "seaview", "description"],
+};
+
+async function main() {
+    const { jsonPayload } = await opper.call({
+        name: "extractRoom", // required, use a unique name for each call/task
+        instructions: "Extract the room details from the text", // required
+        inputSchema: UnstructuredRoomText,
+        outputSchema: StructuredRoom, // recommended
+        model: "anthropic/claude-3.7-sonnet", // optional, otherwise the default model will be used
+        input: {
+            text: "Suite at Grand Hotel with two rooms. A master bedroom with a king sized bed and a bed softa for one. The room has a view to the sea, a large bathroom and a balcony.",
+        },
+    });
+
+    console.log(jsonPayload);
+    // { beds: 2, seaview: true, description: "Room at Grand Hotel with 2 beds and a view to the sea" }
+}
+
+main();
+```
+
+## Performing tracing and logging 
+
+In this example, we implement tracing of a translation task where the an article will be translate to 3 languages by 3 calls. Note how a trace is started as a context manager which makes the individual translations fold into this parent span.
+
+```typescript
+import { Opper } from "opperai";
+
+const opper = new Opper({
+  httpBearer: process.env["OPPER_HTTP_BEARER"] ?? "",
+});
+
+// Define schemas using JSON Schema
+const ArticleTranslationTask = {
+    type: "object",
+    properties: {
+        summary: {
+            type: "string",
+            description: "A concise summary of the main points",
+        },
+        target_language: {
+            type: "string",
+            description: "The target language",
+        },
+    },
+    required: ["summary", "target_language"],
+};
+
+const Translation = {
+    type: "object",
+    properties: {
+        original_language: {
+            type: "string",
+            description: "The original language of the text",
+        },
+        destination_language: {
+            type: "string",
+            description: "The target language of translation",
+        },
+        translated_text: {
+            type: "string",
+            description: "The translated text",
+        },
+    },
+    required: ["original_language", "destination_language", "translated_text"],
+};
+
+async function main() {
+    const article =
+        "The rise of artificial intelligence has transformed many industries. Companies are now using AI to automate tasks, improve customer service, and make better decisions. However, this rapid adoption also raises important questions about ethics and job displacement.";
+
+    // Start a parent span for this content processing workflow
+    const span = await opper.spans.create({
+        name: "translate_article",
+        input: article,
+    });
+
+    try {
+        const target_languages = ["Swedish", "Danish", "Norwegian"];
+        const translated_texts = [];
+
+        for (const language of target_languages) {
+            const { jsonPayload: translation_result } = await opper.call({
+                name: "translate",
+                instructions: "Translate the text",
+                inputSchema: ArticleTranslationTask,
+                outputSchema: Translation,
+                input: {
+                    summary: article,
+                    target_language: language,
+                },
+                parentSpanId: span.id, // Connect to parent span
+            });
+
+            translated_texts.push(translation_result.translated_text);
+        }
+
+        await opper.spans.update(span.id, { output: translated_texts.join("\n") });
+    } finally {
+    }
+}
+
+main();
+```
+
+## Performing evals with metrics
+
+In this example, we evaluate accuracy of a task and save a metric. Note how this test is fast and small and tests the main instruction. Metric will be filterable in the UI.
+
+```typescript
+import { Opper } from "opperai";
+
+const opper = new Opper({
+  httpBearer: process.env["OPPER_HTTP_BEARER"] ?? "",
+});
+
+async function main() {
+  const { message, spanId } = await opper.call({
+    name: "answer-question",
+    instructions: "Answer the question with one word",
+    input: "What is the capital of France?",
+  });
+
+  // Perform a simple evaluation
+  const is_one_word = message?.split(" ").length === 1 ? 1 : 0;
+
+  // Save the evaluation to the span
+  await opper.spanMetrics.createMetric(spanId, {
+    dimension: "evaluate_is_one_word",
+    value: is_one_word,
+        comment: "Evaluated if the answer is one word (1=True, 0=False)",
+  });
+}
+
+main();
+```
+
+## Performing knowledge indexing and retrieval
+    
+Here is an example of how to index and retrieve data with the Opper SDK. Note how we pick a descriptive knowledge base name, and how we add metadata to documents to be able to use that information when composing responses.  
+
+```typescript
+import { Opper } from "opperai";
+
+const opper = new Opper({
+  httpBearer: process.env["OPPER_HTTP_BEARER"] ?? "",
+});
+
+// Define response schema using JSON Schema
+const Response = {
+    type: "object",
+    properties: {
+        references: {
+            type: "array",
+            items: {
+                type: "string",
+            },
+            description:
+                "A list of references to the sources of the information in the response",
+        },
+        response: {
+            type: "string",
+            description:
+                "The response to the question with each fact reference as a footnote",
+        },
+    },
+    required: ["response"],
+};
+
+async function main() {
+    let knowledgeBase;
+    
+    try {
+        knowledgeBase = await opper.knowledge.getByName("my-knowledge-base");
+    } catch (error) {
+        // Knowledge base doesn't exist, create it
+        knowledgeBase = await opper.knowledge.create({
+            name: "my-knowledge-base",
+        });
+
+        // It takes a while for the knowledge base to be ready
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        // Add some text with facts to the knowledge base
+        await opper.knowledge.add(knowledgeBase.id, {
+            content:
+                "Reddit was founded in 2005. Reddit's headquarters are in San Francisco. Reddit reported a revenue of $100 million in 2023.",
+            metadata: {
+                source: "https://www.reddit.com",
+            },
+        });
+
+        // Add another document with Reddit related facts
+        await opper.knowledge.add(knowledgeBase.id, {
+            content:
+                "Reddit has over 430 million monthly active users. Reddit was acquired by Condé Nast in 2006. Reddit's mascot is named Snoo.",
+            metadata: {
+                source: "https://www.wikipedia.com/reddit",
+            },
+        });
+    }
+
+    const query = "What do you know about Reddit?";
+    // Query the knowledge base with a question related to the facts
+    const results = await opper.knowledge.query(knowledgeBase.id, {
+        query,
+        filters: [
+            {
+                field: "source",
+                operation: "=",
+                value: "https://www.reddit.com",
+            },
+        ], // optional filter
+        topK: 5, // optional number of chunks to return
+    });
+
+    // Use the respond function with contents
+    const { jsonPayload: response } = await opper.call({
+        name: "answer_question",
+        instructions:
+            "You are provided with knowledge about a topic. Answer the question using only this provided knowledge. If there is no knowledge, just say you dont know.",
+        input: {
+            question: query,
+            knowledge: results,
+        },
+        outputSchema: Response,
+    });
+
+    console.log(response);
+}
+
+main();
+``` 
