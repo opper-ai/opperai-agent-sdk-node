@@ -13,7 +13,7 @@ Type‑safe, composable agents for Opper AI in TypeScript using: generics, Zod s
 Prerequisites: Node.js 20+ and pnpm (recommended).
 
 ```bash
-pnpm add opper-agents zod
+pnpm add @opperai/agents zod
 ```
 
 Set your Opper key:
@@ -35,7 +35,7 @@ pnpm link ../opperai-agent-sdk-node
 
 ```ts
 // Then import normally
-import { Agent } from "opper-agents";
+import { Agent } from "@opperai/agents";
 ```
 
 2. Local file dependency (copied on install)
@@ -44,7 +44,7 @@ import { Agent } from "opper-agents";
 // app/package.json
 {
   "dependencies": {
-    "opper-agents": "file:../opperai-agent-sdk-node"
+    "@opperai/agents": "file:../opperai-agent-sdk-node"
   }
 }
 ```
@@ -59,7 +59,7 @@ Notes:
 Minimal agent that returns structured JSON:
 
 ```ts
-import { Agent } from "opper-agents";
+import { Agent } from "@opperai/agents";
 import { z } from "zod";
 
 const Output = z.object({ message: z.string() });
@@ -85,7 +85,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   Agent,
-} from "opper-agents";
+} from "@opperai/agents";
 import { z } from "zod";
 
 const add = createFunctionTool(
@@ -106,7 +106,7 @@ const res = await agent.process("What is (5 + 3)? Return JSON with answer.");
 Decorator tools and extraction:
 
 ```ts
-import { tool, extractTools } from "opper-agents";
+import { tool, extractTools } from "@opperai/agents";
 import { z } from "zod";
 
 class WeatherTools {
@@ -124,7 +124,7 @@ const tools = extractTools(new WeatherTools());
 Compose agents by reusing them as tools.
 
 ```ts
-import { Agent } from "opper-agents";
+import { Agent } from "@opperai/agents";
 import { z } from "zod";
 
 const Summarize = new Agent<string, { summary: string }>({
@@ -149,7 +149,7 @@ const answer = await Coordinator.process(
 Wrap MCP servers as tool providers in one line.
 
 ```ts
-import { mcp, MCPconfig, Agent } from "opper-agents";
+import { mcp, MCPconfig, Agent } from "@opperai/agents";
 
 const fsServer = MCPconfig({ name: "fs", transport: "stdio" });
 
@@ -167,7 +167,7 @@ const out = await agent.process("Read README.md and summarize it.");
 Observe the loop and collect metrics without breaking execution.
 
 ```ts
-import { HookEvents } from "opper-agents";
+import { HookEvents } from "@opperai/agents";
 
 agent.registerHook(HookEvents.LoopEnd, ({ context }) => {
   const last = context.executionHistory.at(-1);

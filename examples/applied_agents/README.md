@@ -115,7 +115,7 @@ agent.registerHook(HookEvents.LoopEnd, ({ context }) => {
 Use external tool providers via MCP:
 
 ```typescript
-import { MCPconfig, mcp } from "opper-agents";
+import { MCPconfig, mcp } from "@opperai/agents";
 
 const mcpConfig = MCPconfig({
   name: "provider-name",

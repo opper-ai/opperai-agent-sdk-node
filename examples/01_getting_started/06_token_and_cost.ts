@@ -17,7 +17,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "opper-agents";
+} from "@opperai/agents";
 
 // --- Simple Tools for Multi-Iteration Process ---
 

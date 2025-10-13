@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "opper-agents": ["./src/index.ts"]
+      "@opperai/agents": ["./src/index.ts"]
     },
     "types": ["node"]
   },

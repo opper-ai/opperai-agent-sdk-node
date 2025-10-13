@@ -17,7 +17,7 @@ import {
   extractTools,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "opper-agents";
+} from "@opperai/agents";
 
 // ============================================================================
 // Pattern 1: Decorator-based tools (class methods with @tool decorator)

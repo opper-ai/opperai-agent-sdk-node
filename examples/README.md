@@ -357,7 +357,7 @@ The agent connects through Streamable HTTP, invokes Gmail tools exposed by Compo
 **Pattern 1: Using `createFunctionTool` (function first, options second):**
 
 ```typescript
-import { createFunctionTool, ToolResultFactory } from "opper-agents";
+import { createFunctionTool, ToolResultFactory } from "@opperai/agents";
 import { z } from "zod";
 
 const myTool = createFunctionTool(
@@ -388,7 +388,7 @@ import {
   tool,
   extractTools,
   type ToolExecutionContext,
-} from "opper-agents";
+} from "@opperai/agents";
 
 class MyTools {
   @tool({
@@ -409,7 +409,7 @@ const tools = extractTools(new MyTools());
 ### Creating Agents
 
 ```typescript
-import { Agent } from "opper-agents";
+import { Agent } from "@opperai/agents";
 
 const agent = new Agent({
   name: "MyAgent",

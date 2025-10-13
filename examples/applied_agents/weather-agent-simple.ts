@@ -17,7 +17,7 @@ import {
   ToolResultFactory,
   HookEvents,
   type ToolExecutionContext,
-} from "opper-agents";
+} from "@opperai/agents";
 
 // --- Output Schema ---
 
