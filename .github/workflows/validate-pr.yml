@@ -369,7 +369,6 @@ jobs:
         test,
         build,
         security-scan,
-        documentation-check,
         version-check,
       ]
     if: always() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
