@@ -16,7 +16,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "@opperai/agent-ts";
+} from "opper-agents";
 
 // Define input schema
 const WeatherRequestSchema = z.object({

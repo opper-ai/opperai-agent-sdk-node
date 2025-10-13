@@ -15,7 +15,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "@opperai/agent-ts";
+} from "opper-agents";
 
 // Define strongly-typed math tools using the factory pattern
 // NOTE: createFunctionTool takes (fn, options) - function first!

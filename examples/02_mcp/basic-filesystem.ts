@@ -1,4 +1,4 @@
-import { Agent, MCPconfig, mcp } from "@opperai/agent-ts";
+import { Agent, MCPconfig, mcp } from "opper-agents";
 
 /**
  * Minimal example showing how to attach an MCP server as a tool provider.

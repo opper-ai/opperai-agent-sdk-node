@@ -16,7 +16,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "@opperai/agent-ts";
+} from "opper-agents";
 
 // Check for API key upfront
 if (!process.env["OPPER_API_KEY"]) {

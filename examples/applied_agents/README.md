@@ -4,7 +4,7 @@ This directory contains real-world examples of agents built with the Opper Agent
 
 ## Examples
 
-### 1. Weather Conversation Agent
+### 1. Weather Agent
 
 **File:** `weather-conversation.ts`
 
@@ -115,7 +115,7 @@ agent.registerHook(HookEvents.LoopEnd, ({ context }) => {
 Use external tool providers via MCP:
 
 ```typescript
-import { MCPconfig, mcp } from "@opperai/agent-ts";
+import { MCPconfig, mcp } from "opper-agents";
 
 const mcpConfig = MCPconfig({
   name: "provider-name",

@@ -15,7 +15,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "@opperai/agent-ts";
+} from "opper-agents";
 
 // Simple tool to calculate budget
 const calculateBudgetTool = createFunctionTool(

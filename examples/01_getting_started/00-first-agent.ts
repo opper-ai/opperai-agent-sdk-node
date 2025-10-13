@@ -1,4 +1,4 @@
-import { Agent } from "@opperai/agent-ts";
+import { Agent } from "opper-agents";
 import { z } from "zod";
 
 const Output = z.object({ message: z.string() });
