@@ -28,7 +28,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "@opperai/agent-ts";
+} from "@opperai/agents";
 
 // --- Input Schema ---
 

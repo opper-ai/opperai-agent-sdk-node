@@ -1,4 +1,4 @@
-import { Agent, HookEvents, MCPconfig, mcp } from "@opperai/agent-ts";
+import { Agent, HookEvents, MCPconfig, mcp } from "@opperai/agents";
 import { z } from "zod";
 
 const GmailResultsSchema = z.object({

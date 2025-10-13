@@ -1,0 +1,455 @@
+name: Validate PR
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to validate (leave empty to validate current branch)"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.changes.outputs.src }}
+      docs: ${{ steps.changes.outputs.docs }}
+      workflows: ${{ steps.changes.outputs.workflows }}
+      package: ${{ steps.changes.outputs.package }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for file changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            src:
+              - 'src/**/*'
+              - 'tsconfig.json'
+              - 'tsconfig.base.json'
+              - 'eslint.config.js'
+              - 'vitest.config.ts'
+              - 'tsup.config.ts'
+            docs:
+              - 'docs/**/*'
+              - 'README.md'
+              - '*.md'
+            workflows:
+              - '.github/workflows/**/*'
+            package:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.src == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          pnpm install --frozen-lockfile
+          echo "✅ Dependencies installed"
+
+      - name: Run ESLint
+        run: |
+          echo "🧹 Running ESLint..."
+          pnpm lint
+          echo "✅ ESLint passed"
+
+      - name: Check TypeScript compilation
+        run: |
+          echo "🔧 Checking TypeScript compilation..."
+          pnpm exec tsc --noEmit
+          echo "✅ TypeScript compilation successful"
+
+      - name: Check formatting
+        run: |
+          echo "💅 Checking code formatting..."
+          pnpm format --check || {
+            echo "⚠️  Code formatting issues found"
+            echo "Run 'pnpm format' to fix formatting issues"
+            exit 1
+          }
+          echo "✅ Code formatting is correct"
+
+  test:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.src == 'true' || needs.changes.outputs.package == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          pnpm install --frozen-lockfile
+          echo "✅ Dependencies installed"
+
+      - name: Run tests
+        run: |
+          echo "🧪 Running tests..."
+          pnpm test
+          echo "✅ Tests passed"
+
+      - name: Run integration tests (fixture-based)
+        run: |
+          echo "🧪 Running fixture-based integration tests..."
+          pnpm test:integration
+          echo "✅ Integration tests passed"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.src == 'true' || needs.changes.outputs.package == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          pnpm install --frozen-lockfile
+          echo "✅ Dependencies installed"
+
+      - name: Build package
+        run: |
+          echo "🏗️  Building package..."
+          pnpm build
+          echo "✅ Build completed"
+
+      - name: Validate build outputs
+        run: |
+          echo "🔍 Validating build outputs..."
+
+          # Check that dist directory exists
+          if [ -d "dist" ]; then
+            echo "  ✅ dist directory exists"
+          else
+            echo "  ❌ dist directory missing"
+            exit 1
+          fi
+
+          # Check CommonJS build
+          if [ -f "dist/index.cjs" ]; then
+            echo "  ✅ CommonJS build successful"
+          else
+            echo "  ❌ CommonJS build failed"
+            exit 1
+          fi
+
+          # Check ESM build
+          if [ -f "dist/index.js" ]; then
+            echo "  ✅ ESM build successful"
+          else
+            echo "  ❌ ESM build failed"
+            exit 1
+          fi
+
+          # Check type definitions
+          if [ -f "dist/index.d.ts" ]; then
+            echo "  ✅ Type definitions generated"
+          else
+            echo "  ❌ Type definitions missing"
+            exit 1
+          fi
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          # Test CommonJS import
+          node -e "
+            try {
+              const sdk = require('./dist/index.cjs');
+              console.log('✅ CommonJS import successful');
+
+              // Check that main exports exist
+              if (typeof sdk.Agent !== 'undefined') {
+                console.log('✅ Agent export available');
+              } else {
+                throw new Error('Agent export missing');
+              }
+
+              if (typeof sdk.BaseAgent !== 'undefined') {
+                console.log('✅ BaseAgent export available');
+              } else {
+                throw new Error('BaseAgent export missing');
+              }
+
+            } catch (error) {
+              console.error('❌ CommonJS smoke test failed:', error.message);
+              process.exit(1);
+            }
+          "
+
+          # Test ESM import
+          node --input-type=module -e "
+            (async () => {
+              try {
+                const sdk = await import('./dist/index.js');
+                console.log('✅ ESM import successful');
+
+                // Check that main exports exist
+                if (typeof sdk.Agent !== 'undefined') {
+                  console.log('✅ Agent export available (ESM)');
+                } else {
+                  throw new Error('Agent export missing (ESM)');
+                }
+
+              } catch (error) {
+                console.error('❌ ESM smoke test failed:', error.message);
+                process.exit(1);
+              }
+            })();
+          "
+
+          echo "✅ All smoke tests passed"
+
+      - name: Test package structure
+        run: |
+          echo "📦 Testing package structure..."
+
+          # Validate package.json
+          node -e "
+            const pkg = require('./package.json');
+
+            // Check required fields
+            const required = ['name', 'version', 'main', 'module', 'types'];
+            for (const field of required) {
+              if (!pkg[field]) {
+                throw new Error(\`Missing required field: \${field}\`);
+              }
+            }
+
+            console.log('✅ Package.json structure valid');
+            console.log(\`📦 Package: \${pkg.name}@\${pkg.version}\`);
+          "
+
+          # Test pnpm pack (dry run)
+          echo "📦 Testing package contents..."
+          pnpm pack --dry-run > pack-output.txt 2>&1 || true
+
+          # Check that important files are included
+          if grep -q "dist/" pack-output.txt; then
+            echo "  ✅ Built files included"
+          else
+            echo "  ⚠️  Built files might not be included"
+          fi
+
+          echo "✅ Package structure validation completed"
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.package == 'true' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm audit
+        run: |
+          echo "🔒 Running security audit..."
+          pnpm audit --audit-level moderate || {
+            echo "⚠️  Security vulnerabilities found"
+            echo "Run 'pnpm audit --fix' to resolve automatically fixable issues"
+            # Don't fail the build for audit issues, just warn
+          }
+          echo "✅ Security audit completed"
+
+  version-check:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check version bump
+        run: |
+          echo "📊 Checking version changes..."
+
+          # Get current version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+          # Get previous version from main branch
+          git fetch origin main:main 2>/dev/null || true
+          MAIN_VERSION=$(git show main:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).version" 2>/dev/null || echo "unknown")
+
+          echo "  📦 Current version: $CURRENT_VERSION"
+          echo "  📦 Main version: $MAIN_VERSION"
+
+          if [ "$CURRENT_VERSION" != "$MAIN_VERSION" ]; then
+            echo "  ✅ Version has been updated"
+
+            # Basic semver validation
+            if echo "$CURRENT_VERSION" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'; then
+              echo "  ✅ Version format is valid"
+            else
+              echo "  ⚠️  Version format might be invalid: $CURRENT_VERSION"
+            fi
+          else
+            echo "  ℹ️  Version unchanged (this is okay for non-release PRs)"
+          fi
+
+  pr-summary:
+    runs-on: ubuntu-latest
+    needs:
+      [
+        changes,
+        lint-and-typecheck,
+        test,
+        build,
+        security-scan,
+        version-check,
+      ]
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Generate PR validation summary
+        run: |
+          echo "📋 PR Validation Summary"
+          echo "========================"
+
+          # Determine overall status
+          OVERALL_STATUS="✅ PASSED"
+
+          # Check individual job results
+          if [ "${{ needs.lint-and-typecheck.result }}" == "failure" ]; then
+            OVERALL_STATUS="❌ FAILED"
+            echo "❌ Linting and typecheck: FAILED"
+          elif [ "${{ needs.lint-and-typecheck.result }}" == "success" ]; then
+            echo "✅ Linting and typecheck: PASSED"
+          else
+            echo "⏭️  Linting and typecheck: SKIPPED"
+          fi
+
+          if [ "${{ needs.test.result }}" == "failure" ]; then
+            OVERALL_STATUS="❌ FAILED"
+            echo "❌ Tests: FAILED"
+          elif [ "${{ needs.test.result }}" == "success" ]; then
+            echo "✅ Tests: PASSED"
+          else
+            echo "⏭️  Tests: SKIPPED"
+          fi
+
+          if [ "${{ needs.build.result }}" == "failure" ]; then
+            OVERALL_STATUS="❌ FAILED"
+            echo "❌ Build: FAILED"
+          elif [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ Build: PASSED"
+          else
+            echo "⏭️  Build: SKIPPED"
+          fi
+
+          if [ "${{ needs.security-scan.result }}" == "failure" ]; then
+            echo "⚠️  Security scan: ISSUES FOUND"
+          elif [ "${{ needs.security-scan.result }}" == "success" ]; then
+            echo "✅ Security scan: PASSED"
+          else
+            echo "⏭️  Security scan: SKIPPED"
+          fi
+
+          if [ "${{ needs.documentation-check.result }}" == "failure" ]; then
+            echo "⚠️  Documentation: ISSUES FOUND"
+          elif [ "${{ needs.documentation-check.result }}" == "success" ]; then
+            echo "✅ Documentation: PASSED"
+          else
+            echo "⏭️  Documentation: SKIPPED"
+          fi
+
+          if [ "${{ needs.version-check.result }}" == "success" ]; then
+            echo "✅ Version check: PASSED"
+          else
+            echo "⏭️  Version check: SKIPPED"
+          fi
+
+          echo ""
+          echo "🎯 Overall Status: $OVERALL_STATUS"
+
+          if [ "$OVERALL_STATUS" == "✅ PASSED" ]; then
+            echo ""
+            echo "🚀 This PR is ready for review!"
+            echo "   • All quality checks passed"
+            echo "   • Build artifacts generated successfully"
+            echo "   • No critical security issues found"
+          else
+            echo ""
+            echo "🔧 This PR needs attention:"
+            echo "   • Check failed jobs above"
+            echo "   • Fix any linting or build errors"
+            echo "   • Ensure all tests pass"
+          fi
+
+  auto-merge-check:
+    runs-on: ubuntu-latest
+    needs: [changes, lint-and-typecheck, test, build]
+    if: github.event.pull_request.user.login == 'opper-bot' && needs.lint-and-typecheck.result == 'success' && needs.test.result == 'success' && needs.build.result == 'success'
+    steps:
+      - name: Auto-merge readiness
+        run: |
+          echo "🤖 Automated PR detected from opper-bot"
+          echo "✅ All required checks passed"
+          echo "🎯 This PR is ready for auto-merge (if enabled)"
+          echo ""
+          echo "To enable auto-merge, a maintainer can run:"
+          echo "gh pr merge ${{ github.event.pull_request.number }} --auto --squash"

@@ -1,0 +1,412 @@
+name: Release to NPM
+
+on:
+  push:
+    branches: [main]
+    paths: ["package.json"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.1.0, 1.0.0)"
+        required: true
+        type: string
+      create_release:
+        description: "Create GitHub release"
+        type: boolean
+        default: true
+      dry_run:
+        description: "Dry run (build but do not publish)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write # For NPM provenance
+  pull-requests: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+      prev_version: ${{ steps.check.outputs.prev_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Current version: $VERSION"
+
+      - name: Check if version changed
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "prev_version=manual" >> $GITHUB_OUTPUT
+            echo "🚀 Manual release triggered for version ${{ steps.version.outputs.version }}"
+          else
+            # Check if version changed in the last commit
+            PREV_VERSION=$(git show HEAD~1:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).version" 2>/dev/null || echo "unknown")
+            CURR_VERSION="${{ steps.version.outputs.version }}"
+
+            echo "prev_version=$PREV_VERSION" >> $GITHUB_OUTPUT
+
+            if [ "$PREV_VERSION" != "$CURR_VERSION" ] && [ "$PREV_VERSION" != "unknown" ]; then
+              echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "📈 Version changed: $PREV_VERSION → $CURR_VERSION"
+            else
+              echo "should_release=false" >> $GITHUB_OUTPUT
+              echo "⏸️  Version unchanged: $CURR_VERSION"
+            fi
+          fi
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.dry_run == 'true' && 'dry-run' || 'release' }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          pnpm install --frozen-lockfile
+          echo "✅ Dependencies installed"
+
+      - name: Update version (if manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "🔄 Updating version to ${{ needs.check-version.outputs.version }}"
+
+          # Update version in package.json
+          pnpm version ${{ needs.check-version.outputs.version }} --no-git-tag-version
+
+          # Commit the version update
+          git config --global user.name "opper-bot"
+          git config --global user.email "bot@opper.ai"
+          git add package.json
+          git commit -m "chore: bump version to ${{ needs.check-version.outputs.version }}"
+          git push
+
+      - name: Run quality checks
+        run: |
+          echo "🔍 Running quality checks..."
+
+          # Run linting
+          echo "  🧹 Running ESLint..."
+          pnpm lint
+          echo "  ✅ Linting passed"
+
+          # Run TypeScript type checking
+          echo "  🔧 Running TypeScript type check..."
+          pnpm exec tsc --noEmit
+          echo "  ✅ Type checking passed"
+
+      - name: Run tests
+        run: |
+          echo "🧪 Running tests..."
+          pnpm test
+          echo "✅ Tests passed"
+
+      - name: Run integration tests
+        run: |
+          echo "🧪 Running integration tests..."
+          pnpm test:integration
+          echo "✅ Integration tests passed"
+
+      - name: Build package
+        run: |
+          echo "🔨 Building package..."
+          pnpm build
+          echo "✅ Build completed successfully"
+
+      - name: Validate build artifacts
+        run: |
+          echo "🔍 Validating build artifacts..."
+
+          # Check dist output
+          if [ -d "dist" ]; then
+            echo "  ✅ dist output found"
+            ls -la dist/ | head -10
+          else
+            echo "  ❌ dist output missing"
+            exit 1
+          fi
+
+          # Check CommonJS output
+          if [ -f "dist/index.cjs" ]; then
+            echo "  ✅ CommonJS output found"
+            echo "  📏 CommonJS size: $(du -h dist/index.cjs | cut -f1)"
+          else
+            echo "  ❌ CommonJS output missing"
+            exit 1
+          fi
+
+          # Check ESM output
+          if [ -f "dist/index.js" ]; then
+            echo "  ✅ ESM output found"
+            echo "  📏 ESM size: $(du -h dist/index.js | cut -f1)"
+          else
+            echo "  ❌ ESM output missing"
+            exit 1
+          fi
+
+          # Check type definitions
+          if [ -f "dist/index.d.ts" ]; then
+            echo "  ✅ Type definitions found"
+          else
+            echo "  ❌ Type definitions missing"
+            exit 1
+          fi
+
+          # Verify package contents
+          echo "  📦 Package contents preview:"
+          pnpm pack --dry-run | head -20
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          # Test CommonJS import
+          node -e "
+            try {
+              const sdk = require('./dist/index.cjs');
+              console.log('✅ CommonJS import successful');
+
+              // Test basic instantiation
+              if (typeof sdk.Agent !== 'undefined') {
+                console.log('✅ Agent export available');
+              } else {
+                throw new Error('Agent export missing');
+              }
+
+            } catch (error) {
+              console.error('❌ CommonJS test failed:', error.message);
+              process.exit(1);
+            }
+          "
+
+          # Test ESM import
+          node --input-type=module -e "
+            (async () => {
+              try {
+                const sdk = await import('./dist/index.js');
+                console.log('✅ ESM import successful');
+
+                if (typeof sdk.Agent !== 'undefined') {
+                  console.log('✅ Agent export available (ESM)');
+                } else {
+                  throw new Error('Agent export missing (ESM)');
+                }
+
+              } catch (error) {
+                console.error('❌ ESM test failed:', error.message);
+                process.exit(1);
+              }
+            })();
+          "
+
+          echo "✅ Smoke tests passed"
+
+      - name: Publish to NPM
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "🚀 Publishing to NPM..."
+
+          # Show what will be published
+          echo "📦 Package info:"
+          pnpm pack --dry-run | head -10
+
+          # Publish with provenance
+          if pnpm publish --access public --provenance --no-git-checks; then
+            echo "✅ Successfully published to NPM"
+
+            # Show published package info
+            VERSION="${{ needs.check-version.outputs.version }}"
+            PACKAGE_NAME=$(node -p "require('./package.json').name")
+            echo "🔗 NPM Package: https://www.npmjs.com/package/$PACKAGE_NAME/v/$VERSION"
+          else
+            echo "❌ NPM publish failed"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        if: github.event.inputs.create_release != 'false' && github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          PREV_VERSION="${{ needs.check-version.outputs.prev_version }}"
+          TAG_NAME="v$VERSION"
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+
+          echo "🏷️  Creating GitHub release $TAG_NAME..."
+
+          # Create the tag
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+
+          # Generate changelog if we have a previous version
+          CHANGELOG=""
+          if [ "$PREV_VERSION" != "manual" ] && [ "$PREV_VERSION" != "unknown" ]; then
+            PREV_TAG="v$PREV_VERSION"
+            if git tag | grep -q "^$PREV_TAG$"; then
+              echo "📝 Generating changelog from $PREV_TAG to $TAG_NAME..."
+              CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..$TAG_NAME" | head -20)
+            fi
+          fi
+
+          # Generate release notes
+          RELEASE_NOTES="$(cat <<EOF
+          ## 🚀 Opper Agent TypeScript SDK v$VERSION
+
+          This release contains the latest updates to the Opper Agent TypeScript SDK.
+
+          ### 📦 Installation
+          \`\`\`bash
+          npm install $PACKAGE_NAME@$VERSION
+          # or
+          yarn add $PACKAGE_NAME@$VERSION
+          # or
+          pnpm add $PACKAGE_NAME@$VERSION
+          \`\`\`
+
+          ### 🔧 Features
+          - ✅ Full TypeScript support with strong typing
+          - ✅ Production-ready agent orchestration
+          - ✅ Opper platform integration
+          - ✅ Comprehensive tooling support
+          - ✅ Memory and context management
+          - ✅ MCP (Model Context Protocol) integration
+          - ✅ CommonJS and ESM module support
+
+          $(if [ -n "$CHANGELOG" ]; then echo "### 📋 Changes in this release"; echo "$CHANGELOG"; fi)
+
+          ### 🔗 Links
+          - [NPM Package](https://www.npmjs.com/package/$PACKAGE_NAME/v/$VERSION)
+          - [Documentation](https://docs.opper.ai)
+          - [Examples](https://github.com/opper-ai/opperai-agent-sdk-node/tree/main/examples)
+
+          ### 📚 Getting Started
+
+          \`\`\`typescript
+          import { Agent } from "$PACKAGE_NAME";
+
+          const agent = new Agent({
+            name: "MyAgent",
+            instructions: "You are a helpful assistant",
+            tools: [],
+          });
+
+          const result = await agent.process("Hello!");
+          console.log(result);
+          \`\`\`
+
+          ### 🤖 SDK Information
+          This is the official TypeScript SDK for building agents with Opper AI.
+
+          - **Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - **Module Formats**: CommonJS + ESM
+          - **TypeScript**: Full type definitions included
+          - **Node.js**: >=20 required
+
+          ---
+
+          **Full Changelog**: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v$PREV_VERSION...v$VERSION
+          EOF
+          )"
+
+          # Create the release
+          gh release create "$TAG_NAME" \
+            --title "🚀 Opper Agent TypeScript SDK v$VERSION" \
+            --notes "$RELEASE_NOTES" \
+            --latest
+
+          echo "✅ GitHub release created: https://github.com/opper-ai/opperai-agent-sdk-node/releases/tag/$TAG_NAME"
+
+      - name: Post-release summary
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          PREV_VERSION="${{ needs.check-version.outputs.prev_version }}"
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+
+          echo ""
+          echo "🎉 Release Summary"
+          echo "=================="
+          echo "📦 Package: $PACKAGE_NAME"
+          echo "📦 Version: $VERSION"
+          if [ "$PREV_VERSION" != "manual" ] && [ "$PREV_VERSION" != "unknown" ]; then
+            echo "⬆️  Upgraded from: $PREV_VERSION"
+          fi
+          echo "🏗️  Build: ✅ Successful"
+          echo "🧪 Tests: ✅ Passed"
+
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "🚫 Dry run: Package built but not published"
+          else
+            echo "📤 NPM: ✅ Published"
+            echo "🔗 NPM: https://www.npmjs.com/package/$PACKAGE_NAME/v/$VERSION"
+
+            if [ "${{ github.event.inputs.create_release }}" != "false" ]; then
+              echo "🏷️  GitHub Release: ✅ Created"
+              echo "🔗 Release: https://github.com/opper-ai/opperai-agent-sdk-node/releases/tag/v$VERSION"
+            fi
+          fi
+
+          echo ""
+          echo "🎯 Next steps:"
+          echo "  1. Verify package is available on NPM"
+          echo "  2. Test installation in a fresh project"
+          echo "  3. Update any dependent projects"
+          echo "  4. Announce the release if needed"
+
+  dry-run-summary:
+    needs: [check-version, release]
+    if: github.event.inputs.dry_run == 'true' && needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dry run summary
+        run: |
+          echo "🚫 DRY RUN COMPLETED"
+          echo "==================="
+          echo "This was a dry run - no packages were published."
+          echo ""
+          echo "📦 Version: ${{ needs.check-version.outputs.version }}"
+          echo "✅ Build: Successful"
+          echo "✅ Tests: Passed"
+          echo "🚫 NPM: Not published (dry run)"
+          echo "🚫 GitHub Release: Not created (dry run)"
+          echo ""
+          echo "To publish for real, run the workflow again with 'dry_run: false'"

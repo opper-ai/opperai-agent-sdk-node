@@ -222,7 +222,7 @@ spans.finish(span);
 ## File Organization
 
 ```
-opperai-agent-ts-sdk/
+opperai-agent-sdk-node/
 ├── src/
 │   ├── index.ts
 │   ├── base/

@@ -19,7 +19,7 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
-} from "@opperai/agent-ts";
+} from "@opperai/agents";
 
 // --- Simple Tools for Hook Demonstration ---
 
