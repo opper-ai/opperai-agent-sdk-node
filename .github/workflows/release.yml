@@ -173,9 +173,9 @@ jobs:
           fi
 
           # Check ESM output
-          if [ -f "dist/index.mjs" ]; then
+          if [ -f "dist/index.js" ]; then
             echo "  ✅ ESM output found"
-            echo "  📏 ESM size: $(du -h dist/index.mjs | cut -f1)"
+            echo "  📏 ESM size: $(du -h dist/index.js | cut -f1)"
           else
             echo "  ❌ ESM output missing"
             exit 1
@@ -220,7 +220,7 @@ jobs:
           node --input-type=module -e "
             (async () => {
               try {
-                const sdk = await import('./dist/index.mjs');
+                const sdk = await import('./dist/index.js');
                 console.log('✅ ESM import successful');
 
                 if (typeof sdk.Agent !== 'undefined') {

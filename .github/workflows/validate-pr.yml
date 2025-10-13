@@ -180,7 +180,7 @@ jobs:
           fi
 
           # Check ESM build
-          if [ -f "dist/index.mjs" ]; then
+          if [ -f "dist/index.js" ]; then
             echo "  ✅ ESM build successful"
           else
             echo "  ❌ ESM build failed"
@@ -228,7 +228,7 @@ jobs:
           node --input-type=module -e "
             (async () => {
               try {
-                const sdk = await import('./dist/index.mjs');
+                const sdk = await import('./dist/index.js');
                 console.log('✅ ESM import successful');
 
                 // Check that main exports exist
