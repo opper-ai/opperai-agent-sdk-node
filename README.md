@@ -8,53 +8,29 @@ Type‑safe, composable agents for Opper AI in TypeScript using: generics, Zod s
 - Hooks for observability and custom behavior
 - Tools: function, decorator, MCP provider, or other agents via `.asTool()`
 
-## Install
-
-Prerequisites: Node.js 20+ and pnpm (recommended).
+## Installation
 
 ```bash
-pnpm add @opperai/agents zod
+npm install @opperai/agents
+# or
+yarn add @opperai/agents
+# or
+pnpm add @opperai/agents
 ```
 
-Set your Opper key:
+**Prerequisites:** Node.js 20+
+
+**Set your Opper API key:**
 
 ```bash
-export OPPER_API_KEY="<your-key>"
+export OPPER_API_KEY="your-api-key"
 ```
 
-## Use Locally
-
-Two quick ways to consume this package from a local checkout:
-
-1. Live symlink (best for active development)
-
-```bash
-# In the app that will consume the SDK
-pnpm link ../opperai-agent-sdk-node
-```
-
-```ts
-// Then import normally
-import { Agent } from "@opperai/agents";
-```
-
-2. Local file dependency (copied on install)
-
-```json
-// app/package.json
-{
-  "dependencies": {
-    "@opperai/agents": "file:../opperai-agent-sdk-node"
-  }
-}
-```
-
-Notes:
-
-- Build the SDK first (and optionally watch) so `dist/` is up to date: `pnpm build` or `pnpm dev`.
-- With `link`, changes in this repo are reflected in your app after rebuild.
+Get your API key from the [Opper Dashboard](https://platform.opper.ai).
 
 ## Quick Start
+
+To get started we recommend navigating to the [examples/01_getting_started](./examples/01_getting_started/). They are designed to walk you through the different features of this SDK.
 
 Minimal agent that returns structured JSON:
 

@@ -249,8 +249,8 @@ jobs:
           echo "📦 Package info:"
           pnpm pack --dry-run | head -10
 
-          # Publish with provenance
-          if pnpm publish --access public --provenance --no-git-checks; then
+          # Publish to NPM
+          if pnpm publish --access public --no-git-checks; then
             echo "✅ Successfully published to NPM"
 
             # Show published package info
