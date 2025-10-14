@@ -384,11 +384,7 @@ const myTool = createFunctionTool(
 **Pattern 2: Using `@tool` decorator:**
 
 ```typescript
-import {
-  tool,
-  extractTools,
-  type ToolExecutionContext,
-} from "@opperai/agents";
+import { tool, extractTools, type ToolExecutionContext } from "@opperai/agents";
 
 class MyTools {
   @tool({
