@@ -7,22 +7,27 @@ import {
   DEFAULT_RETRY_CONFIG,
 } from "@/opper/client";
 import { SilentLogger, LogLevel, ConsoleLogger } from "@/utils/logger";
+import { getUserAgent } from "@/utils/version";
 
 // Create mock functions at module level
 const mockCall = vi.fn();
 const mockSpansCreate = vi.fn();
 const mockSpansUpdate = vi.fn();
+const mockOpperConstructor = vi.fn();
 
 // Mock the opperai module
 vi.mock("opperai", () => {
   return {
-    Opper: vi.fn().mockImplementation(() => ({
-      call: mockCall,
-      spans: {
-        create: mockSpansCreate,
-        update: mockSpansUpdate,
-      },
-    })),
+    Opper: vi.fn().mockImplementation((options) => {
+      mockOpperConstructor(options);
+      return {
+        call: mockCall,
+        spans: {
+          create: mockSpansCreate,
+          update: mockSpansUpdate,
+        },
+      };
+    }),
   };
 });
 
@@ -35,6 +40,7 @@ describe("OpperClient", () => {
     mockCall.mockClear();
     mockSpansCreate.mockClear();
     mockSpansUpdate.mockClear();
+    mockOpperConstructor.mockClear();
 
     // Create client with silent logger for tests
     client = new OpperClient(undefined, { logger: new SilentLogger() });
@@ -60,6 +66,17 @@ describe("OpperClient", () => {
     it("creates client with custom retry config", () => {
       const testClient = new OpperClient(undefined, {
         retryConfig: { maxRetries: 5, initialDelayMs: 500 },
+      });
+      expect(testClient).toBeInstanceOf(OpperClient);
+    });
+
+    it("sets User-Agent header with SDK name and version", () => {
+      mockOpperConstructor.mockClear();
+      const testClient = new OpperClient("test-api-key");
+
+      expect(mockOpperConstructor).toHaveBeenCalledWith({
+        httpBearer: "test-api-key",
+        userAgent: getUserAgent(),
       });
       expect(testClient).toBeInstanceOf(OpperClient);
     });

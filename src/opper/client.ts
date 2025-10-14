@@ -5,6 +5,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 import type { AgentLogger } from "../utils/logger";
 import { getDefaultLogger } from "../utils/logger";
+import { getUserAgent } from "../utils/version";
 
 type OpperCallResult = Awaited<ReturnType<Opper["call"]>>;
 
@@ -203,6 +204,7 @@ export class OpperClient {
   ) {
     this.client = new Opper({
       httpBearer: apiKey ?? process.env["OPPER_HTTP_BEARER"] ?? "",
+      userAgent: getUserAgent(),
     });
     this.logger = options.logger ?? getDefaultLogger();
     this.retryConfig = {

@@ -57,11 +57,7 @@ const result = await agent.process("Say hi to Ada");
 Define tools with Zod schemas. Results are discriminated unions that never throw.
 
 ```ts
-import {
-  createFunctionTool,
-  ToolResultFactory,
-  Agent,
-} from "@opperai/agents";
+import { createFunctionTool, ToolResultFactory, Agent } from "@opperai/agents";
 import { z } from "zod";
 
 const add = createFunctionTool(
