@@ -18,6 +18,10 @@ import {
   coerceToolDefinition,
   normalizeToolEntries,
 } from "./tool";
+import {
+  generateAgentFlowDiagram,
+  type VisualizationOptions,
+} from "./visualization";
 import type { Memory } from "../memory/memory";
 import { InMemoryStore } from "../memory/memory";
 
@@ -446,6 +450,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
       metadata: {
         isAgent: true,
         agentName: this.name,
+        wrappedAgent: this, // Store reference to this agent for visualization
       },
       execute: async (
         input: TInput,
@@ -713,5 +718,30 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     });
 
     await Promise.allSettled(teardownPromises);
+  }
+
+  /**
+   * Generate a Mermaid flowchart diagram visualizing the agent's structure and flow.
+   * Shows tools, hooks, schemas, providers, and nested agents.
+   *
+   * @param options - Visualization options
+   * @returns Mermaid markdown string, or file path if outputPath was provided
+   *
+   * @example
+   * ```typescript
+   * // Generate diagram string
+   * const diagram = await agent.visualizeFlow();
+   * console.log(diagram);
+   *
+   * // Save to file
+   * const path = await agent.visualizeFlow({ outputPath: "agent_flow.md" });
+   * console.log(`Saved to ${path}`);
+   *
+   * // Include MCP tools details
+   * const diagram = await agent.visualizeFlow({ includeMcpTools: true });
+   * ```
+   */
+  public async visualizeFlow(options?: VisualizationOptions): Promise<string> {
+    return generateAgentFlowDiagram(this, options);
   }
 }
