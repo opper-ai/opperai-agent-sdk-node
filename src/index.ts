@@ -3,6 +3,7 @@ export * from "./base/context";
 export * from "./base/hooks";
 export * from "./base/result";
 export * from "./base/tool";
+export * from "./base/visualization";
 export * from "./core/agent";
 export * from "./core/schemas";
 export * from "./memory/memory";
