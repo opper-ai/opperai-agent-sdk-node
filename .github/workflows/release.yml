@@ -240,8 +240,6 @@ jobs:
 
       - name: Publish to NPM
         if: github.event.inputs.dry_run != 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "🚀 Publishing to NPM..."
 
@@ -249,8 +247,8 @@ jobs:
           echo "📦 Package info:"
           pnpm pack --dry-run | head -10
 
-          # Publish to NPM
-          if pnpm publish --access public --no-git-checks; then
+          # Publish to NPM with provenance (uses OIDC trusted publishing)
+          if pnpm publish --access public --no-git-checks --provenance; then
             echo "✅ Successfully published to NPM"
 
             # Show published package info
