@@ -160,18 +160,24 @@ agent.registerHook(HookEvents.AgentEnd, ({ context }) => {
 Enable live token-by-token updates by setting `enableStreaming: true` on any agent. Both the think loop and the final result switch to the streaming API, emitting incremental events while still validating the final payload.
 
 ```ts
+import { Agent, HookEvents } from "@opperai/agents";
+import { z } from "zod";
+
 const agent = new Agent({
   name: "StreamingAgent",
   enableStreaming: true,
   outputSchema: z.object({ answer: z.string() }),
+  onStreamStart: ({ callType }) => {
+    console.log(`[stream:start] ${callType}`);
+  },
+  onStreamChunk: ({ callType, accumulated }) => {
+    if (callType === "final_result") {
+      process.stdout.write(accumulated);
+    }
+  },
 });
 
-agent.registerHook(HookEvents.StreamChunk, ({ callType, accumulated }) => {
-  if (callType === "final_result") {
-    process.stdout.write(accumulated);
-  }
-});
-
+// Need to subscribe later? You can still use hooks or the event emitter.
 agent.on(HookEvents.StreamChunk, ({ callType, fieldBuffers }) => {
   if (callType === "think") {
     console.debug(fieldBuffers.reasoning);

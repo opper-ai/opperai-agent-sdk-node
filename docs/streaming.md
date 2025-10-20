@@ -10,6 +10,14 @@ const agent = new Agent({
   instructions: "Stream your intermediate reasoning.",
   enableStreaming: true,
   outputSchema: ResultSchema, // optional
+  onStreamStart: ({ callType }) => {
+    console.log(`[stream:start] ${callType}`);
+  },
+  onStreamChunk: ({ callType, accumulated }) => {
+    if (callType === "final_result") {
+      process.stdout.write(accumulated);
+    }
+  },
 });
 ```
 
@@ -39,6 +47,8 @@ agent.on(HookEvents.StreamChunk, ({ callType, fieldBuffers }) => {
     console.log(fieldBuffers.reasoning);
   }
 });
+
+You can subscribe inline via the constructor with `onStreamStart`, `onStreamChunk`, `onStreamEnd`, and `onStreamError` (shown above), or register listeners later using hooks/event emitters if you need to dynamically add/remove handlers.
 ```
 
 `callType` is `"think"` for the ReAct loop and `"final_result"` for the closing generation. Payloads intentionally mirror the Python SDK.
@@ -81,5 +91,5 @@ Both modes emit identical hook payloads so you can render UI components regardle
 
 ## Examples
 
-- `examples/01_getting_started/09-streaming-basic.ts` – minimal streaming setup with event subscriptions.
+- `examples/01_getting_started/09-streaming-basic.ts` – minimal streaming setup with inline handlers.
 - `examples/applied_agents/streaming-live-monitor.ts` – advanced streaming dashboard with tools and structured output.

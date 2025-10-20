@@ -3,7 +3,8 @@
  *
  * This example shows how to:
  *  - Enable streaming on an agent
- *  - Subscribe to streaming events via the built-in event emitter
+ *  - Subscribe to streaming events via inline constructor handlers
+ *  - Subscribe later via hooks/event emitters (previous pattern)
  *  - Render incremental reasoning and final results to the terminal
  *
  * Run with:
@@ -42,6 +43,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const seenFinalFields = new Set<string>();
+
   const agent = new Agent<string, StreamingSummary>({
     name: "StreamingDemoAgent",
     description:
@@ -56,21 +59,13 @@ Keep everything concise so it fits nicely in a terminal demo.
     outputSchema: StreamingSummarySchema,
     enableStreaming: true,
     verbose: false,
-  });
-
-  console.log("🛰️  Streaming demo – subscribing to agent events\n");
-
-  agent.on(HookEvents.StreamStart, ({ callType }) => {
-    console.log(`\n[stream:start] ${callType}`);
-    if (callType === "think") {
-      process.stdout.write("   reasoning: ");
-    }
-  });
-
-  const seenFinalFields = new Set<string>();
-  const unsubscribeChunk = agent.on(
-    HookEvents.StreamChunk,
-    ({ callType, chunkData, accumulated }) => {
+    onStreamStart: ({ callType }) => {
+      console.log(`\n[stream:start] ${callType}`);
+      if (callType === "think") {
+        process.stdout.write("   reasoning: ");
+      }
+    },
+    onStreamChunk: ({ callType, chunkData, accumulated }) => {
       const jsonPath = chunkData.jsonPath ?? "_root";
       const deltaText = toDisplayString(chunkData.delta);
 
@@ -88,22 +83,43 @@ Keep everything concise so it fits nicely in a terminal demo.
           process.stdout.write(`     ${deltaText}`);
         } else if (jsonPath.startsWith("bulletPoints")) {
           if (!seenFinalFields.has(jsonPath)) {
-            console.log(`\n   bullet ${jsonPath.replace("bulletPoints[", "#").replace("]", "")}:`);
+            console.log(
+              `\n   bullet ${jsonPath.replace("bulletPoints[", "#").replace("]", "")}:`,
+            );
             seenFinalFields.add(jsonPath);
           }
           process.stdout.write(`     ${accumulated}`);
         }
       }
     },
+    onStreamEnd: ({ callType }) => {
+      console.log(`\n[stream:end] ${callType}\n`);
+    },
+    onStreamError: ({ callType, error }) => {
+      console.error(`\n[stream:error] ${callType}:`, error);
+    },
+  });
+
+  console.log("🛰️  Streaming demo – streaming via inline handlers\n");
+
+  // Alternative pattern: subscribe after construction using the event emitter + hooks.
+  // These prints are intentionally prefixed so they stand out from the inline handlers.
+  const unsubscribeEmitter = agent.on(
+    HookEvents.StreamChunk,
+    ({ callType, chunkData }) => {
+      if (callType === "think" && chunkData.jsonPath === "reasoning") {
+        console.log(
+          `\n[event-emitter] reasoning chunk: ${toDisplayString(chunkData.delta)}`,
+        );
+      }
+    },
   );
-
-  agent.on(HookEvents.StreamEnd, ({ callType }) => {
-    console.log(`\n[stream:end] ${callType}\n`);
-  });
-
-  agent.on(HookEvents.StreamError, ({ callType, error }) => {
-    console.error(`\n[stream:error] ${callType}:`, error);
-  });
+  const unregisterHook = agent.registerHook(
+    HookEvents.StreamEnd,
+    ({ callType }) => {
+      console.log(`[hook] stream ended for ${callType}`);
+    },
+  );
 
   const topic =
     "Explain why streaming responses improve developer ergonomics in AI-assisted tooling.";
@@ -115,9 +131,12 @@ Keep everything concise so it fits nicely in a terminal demo.
 
     console.log("\n✅ Final structured result:");
     console.dir(result, { depth: null });
+  } catch (error) {
+    console.error("❌ Streaming demo failed:", error);
+    process.exit(1);
   } finally {
-    // Remove the listener to avoid retaining references if the agent lives longer.
-    unsubscribeChunk();
+    unregisterHook();
+    unsubscribeEmitter();
   }
 }
 

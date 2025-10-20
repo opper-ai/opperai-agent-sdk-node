@@ -530,6 +530,100 @@ describe("Agent", () => {
       expect(capturedContext.usage.requests).toBe(2);
       expect(capturedContext.usage.totalTokens).toBe(60);
     });
+
+    it("registers streaming handlers through configuration", async () => {
+      const thinkEvents = [
+        { data: { spanId: "span-think-config" } },
+        {
+          data: {
+            delta: "Reasoning chunk",
+            jsonPath: "reasoning",
+            chunkType: "json",
+          },
+        },
+      ];
+
+      const finalEvents = [
+        { data: { spanId: "span-final-config" } },
+        {
+          data: {
+            delta: "Done",
+            chunkType: "text",
+          },
+        },
+      ];
+
+      vi.spyOn(mockOpperClient, "stream")
+        .mockResolvedValueOnce(createStreamResponse(thinkEvents))
+        .mockResolvedValueOnce(createStreamResponse(finalEvents));
+
+      const mockSpansGet = vi.fn(async (spanId: string) => ({
+        id: spanId,
+        traceId: `trace-${spanId}`,
+      }));
+      const mockTracesGet = vi.fn(async (traceId: string) => ({
+        spans: [
+          {
+            id: traceId.replace("trace-", ""),
+            data: {
+              totalTokens: 10,
+            },
+          },
+        ],
+      }));
+
+      (mockOpperClient.getClient as Mock).mockReturnValue({
+        spans: { get: mockSpansGet },
+        traces: { get: mockTracesGet },
+      });
+
+      const onStart = vi.fn();
+      const onChunk = vi.fn();
+      const onEnd = vi.fn();
+      const onError = vi.fn();
+
+      const agent = new Agent({
+        name: "StreamingHandlersAgent",
+        opperClient: mockOpperClient,
+        enableStreaming: true,
+        onStreamStart: onStart,
+        onStreamChunk: onChunk,
+        onStreamEnd: onEnd,
+        onStreamError: onError,
+      });
+
+      const result = await agent.process({ task: "complete via config" });
+
+      expect(result).toBe("Done");
+      expect(mockOpperClient.call).not.toHaveBeenCalled();
+      expect(mockOpperClient.stream).toHaveBeenCalledTimes(2);
+      expect(onStart).toHaveBeenCalledTimes(2);
+      expect(onStart).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ callType: "think" }),
+      );
+      expect(onStart).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ callType: "final_result" }),
+      );
+      expect(onChunk).toHaveBeenCalledTimes(2);
+      expect(onChunk).toHaveBeenCalledWith(
+        expect.objectContaining({ callType: "think" }),
+      );
+      expect(onChunk).toHaveBeenCalledWith(
+        expect.objectContaining({ callType: "final_result" }),
+      );
+      expect(onEnd).toHaveBeenCalledTimes(2);
+      expect(onEnd).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ callType: "think" }),
+      );
+      expect(onEnd).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ callType: "final_result" }),
+      );
+      expect(onError).not.toHaveBeenCalled();
+    });
   });
 
   describe("Context and usage tracking", () => {

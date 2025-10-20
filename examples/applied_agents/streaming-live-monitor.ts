@@ -131,30 +131,23 @@ Return a structured analysis with a topic, key findings (3 bullet points), and a
     enableStreaming: true,
     maxIterations: 4,
     model: "gcp/gemini-flash-lite-latest",
-  });
+    onStreamStart: ({ callType }) => {
+      if (callType === "think" || callType === "final_result") {
+        state.currentCall = callType;
+      } else {
+        state.currentCall = null;
+      }
+      state.reasoningPrinted = false;
+      state.toolBannerPrinted = false;
+      state.conclusionBannerPrinted = false;
 
-  let finalUsage: { tokens: number; requests: number } | null = null;
-
-  agent.registerHook(HookEvents.StreamStart, ({ callType }) => {
-    if (callType === "think" || callType === "final_result") {
-      state.currentCall = callType;
-    } else {
-      state.currentCall = null;
-    }
-    state.reasoningPrinted = false;
-    state.toolBannerPrinted = false;
-    state.conclusionBannerPrinted = false;
-
-    if (callType === "think") {
-      console.log("\n🤔 Agent is reasoning...");
-    } else {
-      console.log("\n📝 Generating final analysis...");
-    }
-  });
-
-  agent.registerHook(
-    HookEvents.StreamChunk,
-    ({ callType, chunkData, accumulated }) => {
+      if (callType === "think") {
+        console.log("\n🤔 Agent is reasoning...");
+      } else {
+        console.log("\n📝 Generating final analysis...");
+      }
+    },
+    onStreamChunk: ({ callType, chunkData, accumulated }) => {
       const path = chunkData.jsonPath ?? "";
 
       if (callType === "think") {
@@ -185,19 +178,19 @@ Return a structured analysis with a topic, key findings (3 bullet points), and a
         }
       }
     },
-  );
-
-  agent.registerHook(HookEvents.StreamEnd, ({ callType }) => {
-    if (callType === "think") {
-      console.log("\n   ✓ Thinking complete\n");
-    } else {
-      console.log("\n\n   ✓ Final analysis ready\n");
-    }
+    onStreamEnd: ({ callType }) => {
+      if (callType === "think") {
+        console.log("\n   ✓ Thinking complete\n");
+      } else {
+        console.log("\n\n   ✓ Final analysis ready\n");
+      }
+    },
+    onStreamError: ({ callType, error }) => {
+      console.error(`\n⚠️  Stream error during ${callType}:`, error);
+    },
   });
 
-  agent.registerHook(HookEvents.StreamError, ({ callType, error }) => {
-    console.error(`\n⚠️  Stream error during ${callType}:`, error);
-  });
+  let finalUsage: { tokens: number; requests: number } | null = null;
 
   agent.registerHook(HookEvents.AgentEnd, ({ context }) => {
     finalUsage = {

@@ -93,6 +93,26 @@ export interface BaseAgentConfig<TInput, TOutput> {
   enableStreaming?: boolean;
 
   /**
+   * Register a handler invoked when a streaming call starts.
+   */
+  onStreamStart?: AgentEventListener<typeof HookEvents.StreamStart>;
+
+  /**
+   * Register a handler invoked for each streaming chunk.
+   */
+  onStreamChunk?: AgentEventListener<typeof HookEvents.StreamChunk>;
+
+  /**
+   * Register a handler invoked when a streaming call ends.
+   */
+  onStreamEnd?: AgentEventListener<typeof HookEvents.StreamEnd>;
+
+  /**
+   * Register a handler invoked when streaming encounters an error.
+   */
+  onStreamError?: AgentEventListener<typeof HookEvents.StreamError>;
+
+  /**
    * Enable memory subsystem
    * @default false
    */
@@ -253,6 +273,19 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     this.baseTools = new Map();
     this.toolProviders = new Set();
     this.providerToolRegistry = new Map();
+
+    if (config.onStreamStart) {
+      this.on(HookEvents.StreamStart, config.onStreamStart);
+    }
+    if (config.onStreamChunk) {
+      this.on(HookEvents.StreamChunk, config.onStreamChunk);
+    }
+    if (config.onStreamEnd) {
+      this.on(HookEvents.StreamEnd, config.onStreamEnd);
+    }
+    if (config.onStreamError) {
+      this.on(HookEvents.StreamError, config.onStreamError);
+    }
 
     // Initialize Opper configuration with environment fallback
     this.opperConfig = {
