@@ -3,6 +3,7 @@ import type { Mock } from "vitest";
 import { z } from "zod";
 
 import type { AgentContext } from "../../../src/base/context";
+import { HookEvents } from "../../../src/base/hooks";
 import { ToolResultFactory, type Tool } from "../../../src/base/tool";
 import { Agent } from "../../../src/core/agent";
 import type { AgentDecision } from "../../../src/core/schemas";
@@ -28,6 +29,8 @@ vi.mock("../../../src/opper/client", () => {
     .fn()
     .mockResolvedValue({ id: "mock-span-id", name: "mock-span" });
   OpperClient.prototype.updateSpan = vi.fn().mockResolvedValue(undefined);
+  OpperClient.prototype.stream = vi.fn();
+  OpperClient.prototype.getClient = vi.fn();
   return { OpperClient };
 });
 
@@ -409,6 +412,123 @@ describe("Agent", () => {
       await expect(agent.process({ task: "never ending" })).rejects.toThrow(
         /exceeded maximum iterations/,
       );
+    });
+  });
+
+  describe("Streaming support", () => {
+    const createStreamResponse = (
+      events: Array<{ data: Record<string, unknown> }>,
+    ) => ({
+      headers: {},
+      result: {
+        async *[Symbol.asyncIterator]() {
+          for (const event of events) {
+            yield event;
+          }
+        },
+      },
+    });
+
+    it("streams think and final result with usage tracking", async () => {
+      const thinkEvents = [
+        { data: { spanId: "span-think" } },
+        {
+          data: {
+            delta: "Task is complete",
+            jsonPath: "reasoning",
+            chunkType: "json",
+          },
+        },
+      ];
+
+      const finalEvents = [
+        { data: { spanId: "span-final" } },
+        {
+          data: {
+            delta: "Task done",
+            chunkType: "text",
+          },
+        },
+      ];
+
+      vi.spyOn(mockOpperClient, "stream")
+        .mockResolvedValueOnce(createStreamResponse(thinkEvents))
+        .mockResolvedValueOnce(createStreamResponse(finalEvents));
+
+      const mockSpansGet = vi.fn(async (spanId: string) => ({
+        id: spanId,
+        traceId: `trace-${spanId}`,
+      }));
+      const mockTracesGet = vi.fn(async (traceId: string) => ({
+        spans: [
+          {
+            id: traceId.replace("trace-", ""),
+            data: {
+              totalTokens: traceId.includes("think") ? 42 : 18,
+            },
+          },
+        ],
+      }));
+
+      (mockOpperClient.getClient as Mock).mockReturnValue({
+        spans: { get: mockSpansGet },
+        traces: { get: mockTracesGet },
+      });
+
+      const agent = new Agent({
+        name: "StreamingAgent",
+        opperClient: mockOpperClient,
+        enableStreaming: true,
+      });
+
+      const hookEvents: Array<{ event: string; callType: string }> = [];
+      agent.registerHook(HookEvents.StreamStart, ({ callType }) => {
+        hookEvents.push({ event: "start", callType });
+      });
+      agent.registerHook(
+        HookEvents.StreamEnd,
+        ({ callType, fieldBuffers }) => {
+          hookEvents.push({ event: "end", callType });
+          if (callType === "think") {
+            expect(fieldBuffers["reasoning"]).toBe("Task is complete");
+          }
+        },
+      );
+
+      const emitterSpy = vi.fn();
+      agent.on(HookEvents.StreamChunk, (payload) => {
+        emitterSpy(payload.callType);
+      });
+
+      let capturedContext: AgentContext | undefined;
+      agent.registerHook(HookEvents.AgentEnd, ({ context }) => {
+        capturedContext = context;
+      });
+
+      const result = await agent.process({ task: "complete" });
+
+      expect(result).toBe("Task done");
+      expect(mockOpperClient.call).not.toHaveBeenCalled();
+      expect(mockOpperClient.stream).toHaveBeenCalledTimes(2);
+      expect(mockSpansGet).toHaveBeenCalledWith("span-think");
+      expect(mockTracesGet).toHaveBeenCalledWith("trace-span-think");
+      expect(emitterSpy).toHaveBeenCalledWith("think");
+      expect(emitterSpy).toHaveBeenCalledWith("final_result");
+
+      expect(hookEvents).toEqual([
+        { event: "start", callType: "think" },
+        { event: "end", callType: "think" },
+        { event: "start", callType: "final_result" },
+        { event: "end", callType: "final_result" },
+      ]);
+
+      expect(capturedContext).toBeDefined();
+      if (!capturedContext) {
+        throw new Error("Expected context to be captured");
+      }
+
+      expect(capturedContext.usage.requests).toBe(2);
+      expect(capturedContext.usage.totalTokens).toBe(60);
     });
   });
 

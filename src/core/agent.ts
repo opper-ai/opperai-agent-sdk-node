@@ -13,6 +13,7 @@ import type { ToolSuccess } from "../base/tool";
 import { OpperClient } from "../opper/client";
 import { getDefaultLogger, LogLevel, type AgentLogger } from "../utils/logger";
 import { schemaToJson } from "../utils/schema-utils";
+import { createStreamAssembler } from "../utils/streaming";
 
 const isToolSuccessResult = (value: unknown): value is ToolSuccess<unknown> => {
   if (typeof value !== "object" || value === null) {
@@ -219,12 +220,16 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
   private async think(
     input: TInput,
     context: AgentContext,
-  ): Promise<{ decision: AgentDecision; spanId: string }> {
+  ): Promise<{ decision: AgentDecision; spanId?: string }> {
     const spanName = "think";
     this.log("Think step", { iteration: context.iteration });
 
     // Trigger hook: llm_call
     await this.triggerHook(HookEvents.LlmCall, { context, callType: "think" });
+
+    if (this.enableStreaming) {
+      return this.thinkStreaming(input, context);
+    }
 
     try {
       // Build static instructions
@@ -280,6 +285,155 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       return { decision, spanId: response.spanId };
     } catch (error) {
+      this.logger.error("Think step failed", error);
+      throw new Error(
+        `Think step failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async thinkStreaming(
+    input: TInput,
+    context: AgentContext,
+  ): Promise<{ decision: AgentDecision; spanId?: string }> {
+    const spanName = "think";
+    const instructions = this.buildThinkInstructions();
+    const thinkContext = await this.buildThinkContext(input, context);
+    const assembler = createStreamAssembler({
+      schema: AgentDecisionSchema as z.ZodType<AgentDecision>,
+    });
+    let streamSpanId: string | undefined;
+
+    await this.triggerHook(HookEvents.StreamStart, {
+      context,
+      callType: "think",
+    });
+    this.emitAgentEvent(HookEvents.StreamStart, {
+      context,
+      callType: "think",
+    });
+
+    try {
+      const streamResponse = await this.opperClient.stream<
+        typeof thinkContext,
+        AgentDecision
+      >({
+        name: spanName,
+        instructions,
+        input: thinkContext,
+        outputSchema: AgentDecisionSchema as z.ZodType<AgentDecision>,
+        model: this.model,
+        ...(context.parentSpanId && { parentSpanId: context.parentSpanId }),
+      });
+
+      for await (const event of streamResponse.result) {
+        const data = event?.data;
+        if (!data) {
+          continue;
+        }
+
+        if (!streamSpanId && typeof data.spanId === "string" && data.spanId) {
+          streamSpanId = data.spanId;
+        }
+
+        const feedResult = assembler.feed({
+          delta: data.delta,
+          jsonPath: data.jsonPath,
+        });
+
+        if (!feedResult) {
+          continue;
+        }
+
+        const chunkPayload = {
+          context,
+          callType: "think",
+          chunkData: {
+            delta: data.delta,
+            jsonPath: data.jsonPath ?? null,
+            chunkType: data.chunkType ?? null,
+          },
+          accumulated: feedResult.accumulated,
+          fieldBuffers: feedResult.snapshot,
+        };
+
+        await this.triggerHook(HookEvents.StreamChunk, chunkPayload);
+        this.emitAgentEvent(HookEvents.StreamChunk, chunkPayload);
+      }
+
+      const fieldBuffers = assembler.snapshot();
+      const endPayload = {
+        context,
+        callType: "think",
+        fieldBuffers,
+      };
+      await this.triggerHook(HookEvents.StreamEnd, endPayload);
+      this.emitAgentEvent(HookEvents.StreamEnd, endPayload);
+
+      const finalize = assembler.finalize();
+
+      let decision: AgentDecision;
+      if (finalize.type === "structured" && finalize.structured) {
+        decision = AgentDecisionSchema.parse(
+          finalize.structured as Record<string, unknown>,
+        );
+      } else {
+        decision = AgentDecisionSchema.parse({
+          reasoning: finalize.type === "root" ? finalize.rootText ?? "" : "",
+        });
+      }
+
+      const usageTracked = await this.trackStreamingUsageBySpan(
+        context,
+        streamSpanId,
+      );
+      if (!usageTracked) {
+        context.updateUsage({
+          requests: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cost: { generation: 0, platform: 0, total: 0 },
+        });
+      }
+
+      await this.triggerHook(HookEvents.LlmResponse, {
+        context,
+        callType: "think",
+        response: streamResponse,
+        parsed: decision,
+      });
+
+      await this.triggerHook(HookEvents.ThinkEnd, {
+        context,
+        thought: { reasoning: decision.reasoning },
+      });
+
+      this.log("Think result", {
+        reasoning: decision.reasoning,
+        toolCalls: decision.toolCalls.length,
+        memoryReads: decision.memoryReads?.length ?? 0,
+        memoryWrites: Object.keys(decision.memoryUpdates ?? {}).length,
+      });
+
+      const resultPayload: { decision: AgentDecision; spanId?: string } = {
+        decision,
+      };
+      if (streamSpanId) {
+        resultPayload.spanId = streamSpanId;
+      }
+      return resultPayload;
+    } catch (error) {
+      await this.triggerHook(HookEvents.StreamError, {
+        context,
+        callType: "think",
+        error,
+      });
+      this.emitAgentEvent(HookEvents.StreamError, {
+        context,
+        callType: "think",
+        error,
+      });
       this.logger.error("Think step failed", error);
       throw new Error(
         `Think step failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -728,6 +882,14 @@ The memory you write persists across all process() calls on this agent.`;
     const instructions = `Generate the final result based on the execution history.
 Follow any instructions provided for formatting and style.`;
 
+    if (this.enableStreaming) {
+      return this.generateFinalResultStreaming(
+        context,
+        finalContext,
+        instructions,
+      );
+    }
+
     try {
       // Call Opper to generate final result
       const callOptions: {
@@ -783,6 +945,228 @@ Follow any instructions provided for formatting and style.`;
         `Failed to generate final result: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private async generateFinalResultStreaming(
+    context: AgentContext,
+    finalContext: {
+      goal: string;
+      instructions: string;
+      execution_history: Array<{
+        iteration: number;
+        actions_taken: string[];
+        results: Array<{
+          tool: string;
+          result: string;
+        }>;
+      }>;
+      total_iterations: number;
+    },
+    instructions: string,
+  ): Promise<TOutput> {
+    const assembler = createStreamAssembler(
+      this.outputSchema ? { schema: this.outputSchema } : undefined,
+    );
+    let streamSpanId: string | undefined;
+
+    await this.triggerHook(HookEvents.StreamStart, {
+      context,
+      callType: "final_result",
+    });
+    this.emitAgentEvent(HookEvents.StreamStart, {
+      context,
+      callType: "final_result",
+    });
+
+    try {
+      const streamResponse = await this.opperClient.stream<
+        typeof finalContext,
+        TOutput
+      >({
+        name: "generate_final_result",
+        instructions,
+        input: finalContext,
+        model: this.model,
+        ...(context.parentSpanId && { parentSpanId: context.parentSpanId }),
+        ...(this.outputSchema && { outputSchema: this.outputSchema }),
+      });
+
+      for await (const event of streamResponse.result) {
+        const data = event?.data;
+        if (!data) {
+          continue;
+        }
+
+        if (!streamSpanId && typeof data.spanId === "string" && data.spanId) {
+          streamSpanId = data.spanId;
+        }
+
+        const feedResult = assembler.feed({
+          delta: data.delta,
+          jsonPath: data.jsonPath,
+        });
+
+        if (!feedResult) {
+          continue;
+        }
+
+        const chunkPayload = {
+          context,
+          callType: "final_result",
+          chunkData: {
+            delta: data.delta,
+            jsonPath: data.jsonPath ?? null,
+            chunkType: data.chunkType ?? null,
+          },
+          accumulated: feedResult.accumulated,
+          fieldBuffers: feedResult.snapshot,
+        };
+
+        await this.triggerHook(HookEvents.StreamChunk, chunkPayload);
+        this.emitAgentEvent(HookEvents.StreamChunk, chunkPayload);
+      }
+
+      const fieldBuffers = assembler.snapshot();
+      const endPayload = {
+        context,
+        callType: "final_result",
+        fieldBuffers,
+      };
+      await this.triggerHook(HookEvents.StreamEnd, endPayload);
+      this.emitAgentEvent(HookEvents.StreamEnd, endPayload);
+
+      const finalize = assembler.finalize();
+
+      let result: TOutput;
+      if (this.outputSchema) {
+        if (finalize.type !== "structured" || finalize.structured === undefined) {
+          throw new Error(
+            "Streaming response did not provide structured data for the configured output schema.",
+          );
+        }
+        result = this.outputSchema.parse(
+          finalize.structured as Record<string, unknown>,
+        ) as TOutput;
+      } else if (finalize.type === "root") {
+        result = (finalize.rootText ?? "") as TOutput;
+      } else if (finalize.type === "structured" && finalize.structured) {
+        result = JSON.stringify(finalize.structured) as TOutput;
+      } else {
+        result = "" as TOutput;
+      }
+
+      const usageTracked = await this.trackStreamingUsageBySpan(
+        context,
+        streamSpanId,
+      );
+      if (!usageTracked) {
+        context.updateUsage({
+          requests: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cost: { generation: 0, platform: 0, total: 0 },
+        });
+      }
+
+      await this.triggerHook(HookEvents.LlmResponse, {
+        context,
+        callType: "final_result",
+        response: streamResponse,
+        parsed: result,
+      });
+
+      this.log(
+        this.outputSchema
+          ? "Final result generated (streaming, schema-validated)"
+          : "Final result generated (streaming)",
+      );
+
+      return result;
+    } catch (error) {
+      await this.triggerHook(HookEvents.StreamError, {
+        context,
+        callType: "final_result",
+        error,
+      });
+      this.emitAgentEvent(HookEvents.StreamError, {
+        context,
+        callType: "final_result",
+        error,
+      });
+      this.logger.error("Failed to generate final result", error);
+      throw new Error(
+        `Failed to generate final result: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async trackStreamingUsageBySpan(
+    context: AgentContext,
+    spanId?: string,
+  ): Promise<boolean> {
+    if (!spanId) {
+      return false;
+    }
+
+    try {
+      const span = await this.opperClient.getClient().spans.get(spanId);
+      const traceId =
+        (span as { traceId?: string | null })?.traceId ??
+        (span as { trace_id?: string | null })?.trace_id;
+      if (!traceId) {
+        return false;
+      }
+
+      const trace = await this.opperClient.getClient().traces.get(traceId);
+      const spans = (trace as { spans?: Array<Record<string, unknown>> | null })
+        ?.spans;
+      if (!Array.isArray(spans)) {
+        return false;
+      }
+
+      for (const entry of spans) {
+        const entryId =
+          (entry as { id?: string | null })?.id ??
+          ((entry as Record<string, unknown>)["id"] as string | undefined);
+        if (entryId !== spanId) {
+          continue;
+        }
+
+        const data = (entry as { data?: Record<string, unknown> | null })?.data;
+        if (!data) {
+          continue;
+        }
+
+        const record = data as Record<string, unknown>;
+        const primaryTotal = record["totalTokens"];
+        const fallbackTotal = record["total_tokens"];
+        const totalTokensRaw =
+          typeof primaryTotal === "number" && Number.isFinite(primaryTotal)
+            ? primaryTotal
+            : typeof fallbackTotal === "number" && Number.isFinite(fallbackTotal)
+              ? fallbackTotal
+              : undefined;
+
+        if (totalTokensRaw !== undefined) {
+          context.updateUsage({
+            requests: 1,
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: totalTokensRaw,
+            cost: { generation: 0, platform: 0, total: 0 },
+          });
+          return true;
+        }
+      }
+    } catch (error) {
+      this.logger.warn("Could not fetch streaming usage", {
+        spanId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return false;
   }
 
   /**

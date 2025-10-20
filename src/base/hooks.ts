@@ -17,6 +17,10 @@ export const HookEvents = {
   MemoryRead: "memory:read",
   MemoryWrite: "memory:write",
   MemoryError: "memory:error",
+  StreamStart: "stream:start",
+  StreamChunk: "stream:chunk",
+  StreamEnd: "stream:end",
+  StreamError: "stream:error",
 } as const;
 
 export type HookEventName = (typeof HookEvents)[keyof typeof HookEvents];
@@ -44,6 +48,7 @@ export interface HookPayloadMap {
     context: AgentContext;
     callType: string;
     response: unknown;
+    parsed?: unknown;
   };
   [HookEvents.ThinkEnd]: {
     context: AgentContext;
@@ -79,6 +84,31 @@ export interface HookPayloadMap {
   [HookEvents.MemoryError]: {
     context: AgentContext;
     operation: "read" | "write" | "delete" | "clear";
+    error: unknown;
+  };
+  [HookEvents.StreamStart]: {
+    context: AgentContext;
+    callType: string;
+  };
+  [HookEvents.StreamChunk]: {
+    context: AgentContext;
+    callType: string;
+    chunkData: {
+      delta: unknown;
+      jsonPath?: string | null;
+      chunkType?: string | null;
+    };
+    accumulated: string;
+    fieldBuffers: Record<string, string>;
+  };
+  [HookEvents.StreamEnd]: {
+    context: AgentContext;
+    callType: string;
+    fieldBuffers: Record<string, string>;
+  };
+  [HookEvents.StreamError]: {
+    context: AgentContext;
+    callType: string;
     error: unknown;
   };
 }

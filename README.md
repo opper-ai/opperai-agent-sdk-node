@@ -155,6 +155,32 @@ agent.registerHook(HookEvents.AgentEnd, ({ context }) => {
 });
 ```
 
+## Streaming
+
+Enable live token-by-token updates by setting `enableStreaming: true` on any agent. Both the think loop and the final result switch to the streaming API, emitting incremental events while still validating the final payload.
+
+```ts
+const agent = new Agent({
+  name: "StreamingAgent",
+  enableStreaming: true,
+  outputSchema: z.object({ answer: z.string() }),
+});
+
+agent.registerHook(HookEvents.StreamChunk, ({ callType, accumulated }) => {
+  if (callType === "final_result") {
+    process.stdout.write(accumulated);
+  }
+});
+
+agent.on(HookEvents.StreamChunk, ({ callType, fieldBuffers }) => {
+  if (callType === "think") {
+    console.debug(fieldBuffers.reasoning);
+  }
+});
+```
+
+See [docs/streaming.md](./docs/streaming.md) for hook payloads, JSON-path buffering, and usage tracking details.
+
 ## Type Safety with Zod
 
 - Provide `inputSchema`/`outputSchema` to validate at runtime and type the agent at compile time.
