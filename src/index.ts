@@ -1,5 +1,6 @@
 export * from "./base/agent";
 export * from "./base/context";
+export * from "./base/events";
 export * from "./base/hooks";
 export * from "./base/result";
 export * from "./base/tool";
@@ -13,5 +14,6 @@ export * from "./mcp/provider";
 export * from "./opper/client";
 export * from "./utils/logger";
 export * from "./utils/schema-utils";
+export * from "./utils/streaming";
 export * from "./utils/tool-decorators";
 export * from "./utils/tool-runner";

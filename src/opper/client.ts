@@ -6,8 +6,35 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import type { AgentLogger } from "../utils/logger";
 import { getDefaultLogger } from "../utils/logger";
 import { getUserAgent } from "../utils/version";
-
 type OpperCallResult = Awaited<ReturnType<Opper["call"]>>;
+
+/**
+ * Streaming chunk payload from Opper SSE responses.
+ */
+export interface OpperStreamChunk {
+  delta?: string | number | boolean | null | undefined;
+  jsonPath?: string | null | undefined;
+  spanId?: string | null | undefined;
+  chunkType?: string | null | undefined;
+}
+
+/**
+ * Server-sent event emitted during streaming calls.
+ */
+export interface OpperStreamEvent {
+  id?: string;
+  event?: string;
+  retry?: number;
+  data?: OpperStreamChunk;
+}
+
+/**
+ * Structured response returned by Opper stream endpoints.
+ */
+export interface OpperStreamResponse {
+  headers: Record<string, string[]>;
+  result: AsyncIterable<OpperStreamEvent>;
+}
 
 type TokenUsageMetrics = {
   inputTokens: number;
@@ -131,6 +158,11 @@ export interface OpperCallOptions<TInput = unknown, TOutput = unknown> {
    * Parent span ID for tracing
    */
   parentSpanId?: string;
+
+  /**
+   * Abort signal used to cancel the underlying HTTP request.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -224,7 +256,7 @@ export class OpperClient {
       const inputSchema = this.toJsonSchema(options.inputSchema);
       const outputSchema = this.toJsonSchema(options.outputSchema);
 
-      const response = await this.client.call({
+      const callPayload = {
         name: options.name,
         instructions: options.instructions,
         input: options.input,
@@ -232,7 +264,11 @@ export class OpperClient {
         ...(outputSchema && { outputSchema }),
         ...(options.model && { model: options.model }),
         ...(options.parentSpanId && { parentSpanId: options.parentSpanId }),
-      });
+      };
+
+      const response = options.signal
+        ? await this.client.call(callPayload, { signal: options.signal })
+        : await this.client.call(callPayload);
 
       // Parse usage information
       const usagePayload = extractUsage(response);
@@ -257,6 +293,45 @@ export class OpperClient {
 
       return result;
     }, options.name);
+  }
+
+  /**
+   * Stream a call to Opper with retry logic
+   */
+  public async stream<TInput = unknown, TOutput = unknown>(
+    options: OpperCallOptions<TInput, TOutput>,
+  ): Promise<OpperStreamResponse> {
+    return this.withRetry(async () => {
+      const inputSchema = this.toJsonSchema(options.inputSchema);
+      const outputSchema = this.toJsonSchema(options.outputSchema);
+
+      const streamPayload = {
+        name: options.name,
+        instructions: options.instructions,
+        input: options.input,
+        ...(inputSchema && { inputSchema }),
+        ...(outputSchema && { outputSchema }),
+        ...(options.model && { model: options.model }),
+        ...(options.parentSpanId && { parentSpanId: options.parentSpanId }),
+      };
+
+      const response = options.signal
+        ? await this.client.stream(streamPayload, { signal: options.signal })
+        : await this.client.stream(streamPayload);
+
+      const iterable: AsyncIterable<OpperStreamEvent> = {
+        async *[Symbol.asyncIterator]() {
+          for await (const event of response.result) {
+            yield event as OpperStreamEvent;
+          }
+        },
+      };
+
+      return {
+        headers: response.headers,
+        result: iterable,
+      };
+    }, `stream:${options.name}`);
   }
 
   /**

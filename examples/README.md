@@ -48,6 +48,8 @@ pnpm example examples/01_getting_started/02-schemas.ts
 pnpm example examples/01_getting_started/03-tool-patterns.ts
 pnpm example examples/01_getting_started/04-agent-as-tool.ts
 pnpm example examples/01_getting_started/05-memory-usage.ts
+pnpm example examples/01_getting_started/09-streaming-basic.ts
+pnpm example examples/applied_agents/streaming-live-monitor.ts
 pnpm example examples/02_mcp/basic-filesystem.ts
 pnpm example examples/02_mcp/composio-gmail.ts
 ```
@@ -291,6 +293,31 @@ Demonstrates persistent memory across agent executions:
 
 ```bash
 pnpm example examples/01_getting_started/05-memory-usage.ts
+```
+
+---
+
+### Example 9: Streaming with Event Subscribers
+
+**File:** `01_getting_started/09-streaming-basic.ts`
+
+Highlights the TypeScript-first streaming API:
+
+- Enabling `enableStreaming` on an agent
+- Subscribing to streaming events via `agent.on(...)`
+- Rendering live reasoning and structured results in the terminal
+- Demonstrating how deltas arrive for both think and final-result phases
+
+**Key Concepts:**
+
+- ✅ Streaming event emitter usage (`HookEvents.Stream*`)
+- ✅ Combining structured schemas with incremental updates
+- ✅ Keeping UIs responsive with live deltas
+
+**Run it:**
+
+```bash
+pnpm example examples/01_getting_started/09-streaming-basic.ts
 ```
 
 ---

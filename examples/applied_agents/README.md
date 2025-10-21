@@ -6,7 +6,7 @@ This directory contains real-world examples of agents built with the Opper Agent
 
 ### 1. Weather Agent
 
-**File:** `weather-conversation.ts`
+**File:** `weather-agent-simple.ts`
 
 A conversational agent that demonstrates structured input/output with conversation-style messages. Shows how to build natural, multi-turn conversations with an agent.
 
@@ -21,7 +21,7 @@ A conversational agent that demonstrates structured input/output with conversati
 **Run it:**
 
 ```bash
-pnpm example examples/applied_agents/weather-conversation.ts
+pnpm example examples/applied_agents/weather-agent-simple.ts
 ```
 
 **What it demonstrates:**
@@ -70,6 +70,33 @@ pnpm example examples/applied_agents/deep-research-agent.ts
 - Structured research schemas
 - Multi-iteration agent workflows
 - File system operations from agents
+
+---
+
+### 3. Streaming Live Monitor
+
+**File:** `streaming-live-monitor.ts`
+
+An advanced streaming walkthrough. It illustrates how to observe the agent’s thought process, tool selection, and final structured output in real time.
+
+**Features:**
+
+- Event-driven streaming with `HookEvents.Stream*`
+- Live CLI dashboard for reasoning and tool usage
+- Structured output validated against a Zod schema
+- Demonstrates tool orchestration while streaming
+
+**Run it:**
+
+```bash
+pnpm example examples/applied_agents/streaming-live-monitor.ts
+```
+
+**What it demonstrates:**
+
+- Building rich observability on top of streaming hooks
+- Handling both reasoning (`callType: "think"`) and final output streams
+- Combining multiple tools with the streaming agent workflow
 
 ---
 

@@ -2,6 +2,12 @@ import type { ZodType } from "zod";
 
 import type { AgentContext } from "./context";
 import {
+  AgentEventEmitter,
+  type AgentEventListener,
+  type AgentEventName,
+  type AgentEventPayload,
+} from "./events";
+import {
   HookEvents,
   HookManager,
   type HookEventName,
@@ -79,6 +85,32 @@ export interface BaseAgentConfig<TInput, TOutput> {
    * Output schema for validation (Zod schema)
    */
   outputSchema?: ZodType<TOutput>;
+
+  /**
+   * Enable Opper streaming APIs for LLM calls
+   * @default false
+   */
+  enableStreaming?: boolean;
+
+  /**
+   * Register a handler invoked when a streaming call starts.
+   */
+  onStreamStart?: AgentEventListener<typeof HookEvents.StreamStart>;
+
+  /**
+   * Register a handler invoked for each streaming chunk.
+   */
+  onStreamChunk?: AgentEventListener<typeof HookEvents.StreamChunk>;
+
+  /**
+   * Register a handler invoked when a streaming call ends.
+   */
+  onStreamEnd?: AgentEventListener<typeof HookEvents.StreamEnd>;
+
+  /**
+   * Register a handler invoked when streaming encounters an error.
+   */
+  onStreamError?: AgentEventListener<typeof HookEvents.StreamError>;
 
   /**
    * Enable memory subsystem
@@ -171,6 +203,11 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
   public readonly enableMemory: boolean;
 
   /**
+   * Whether streaming is enabled
+   */
+  public readonly enableStreaming: boolean;
+
+  /**
    * Memory instance for persistent storage (null if disabled or initialization failed)
    */
   public readonly memory: Memory | null;
@@ -184,6 +221,11 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
    * Hook manager for lifecycle events
    */
   protected readonly hooks: HookManager;
+
+  /**
+   * Event dispatcher for runtime events (notably streaming)
+   */
+  protected readonly events: AgentEventEmitter;
 
   /**
    * Registry of available tools
@@ -222,13 +264,28 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     this.inputSchema = config.inputSchema;
     this.outputSchema = config.outputSchema;
     this.enableMemory = config.enableMemory ?? false;
+    this.enableStreaming = config.enableStreaming ?? false;
     this.metadata = { ...(config.metadata ?? {}) };
 
     this.hooks = new HookManager();
+    this.events = new AgentEventEmitter();
     this.tools = new Map();
     this.baseTools = new Map();
     this.toolProviders = new Set();
     this.providerToolRegistry = new Map();
+
+    if (config.onStreamStart) {
+      this.on(HookEvents.StreamStart, config.onStreamStart);
+    }
+    if (config.onStreamChunk) {
+      this.on(HookEvents.StreamChunk, config.onStreamChunk);
+    }
+    if (config.onStreamEnd) {
+      this.on(HookEvents.StreamEnd, config.onStreamEnd);
+    }
+    if (config.onStreamError) {
+      this.on(HookEvents.StreamError, config.onStreamError);
+    }
 
     // Initialize Opper configuration with environment fallback
     this.opperConfig = {
@@ -491,6 +548,47 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
   }
 
   /**
+   * Register an event listener.
+   *
+   * @param event - Event name
+   * @param listener - Listener callback
+   * @returns Cleanup function to unregister the listener
+   */
+  public on<E extends AgentEventName>(
+    event: E,
+    listener: AgentEventListener<E>,
+  ): () => void {
+    return this.events.on(event, listener);
+  }
+
+  /**
+   * Register a one-time event listener that removes itself after the first call.
+   *
+   * @param event - Event name
+   * @param listener - Listener callback
+   * @returns Cleanup function (no-op once listener fires)
+   */
+  public once<E extends AgentEventName>(
+    event: E,
+    listener: AgentEventListener<E>,
+  ): () => void {
+    return this.events.once(event, listener);
+  }
+
+  /**
+   * Remove a previously registered event listener.
+   *
+   * @param event - Event name
+   * @param listener - Listener callback to remove
+   */
+  public off<E extends AgentEventName>(
+    event: E,
+    listener: AgentEventListener<E>,
+  ): void {
+    this.events.off(event, listener);
+  }
+
+  /**
    * Trigger a hook event with a payload.
    * Swallows errors to prevent hook failures from breaking agent execution.
    *
@@ -507,6 +605,19 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
       // Log but don't throw - hook failures shouldn't break agent execution
       console.warn(`Hook error for event ${event}:`, error);
     }
+  }
+
+  /**
+   * Emit a runtime event to listeners.
+   *
+   * @param event - Event name
+   * @param payload - Event payload
+   */
+  protected emitAgentEvent<E extends AgentEventName>(
+    event: E,
+    payload: AgentEventPayload<E>,
+  ): void {
+    this.events.emit(event, payload);
   }
 
   /**
