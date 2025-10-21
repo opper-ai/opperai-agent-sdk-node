@@ -158,6 +158,11 @@ export interface OpperCallOptions<TInput = unknown, TOutput = unknown> {
    * Parent span ID for tracing
    */
   parentSpanId?: string;
+
+  /**
+   * Abort signal used to cancel the underlying HTTP request.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -251,7 +256,7 @@ export class OpperClient {
       const inputSchema = this.toJsonSchema(options.inputSchema);
       const outputSchema = this.toJsonSchema(options.outputSchema);
 
-      const response = await this.client.call({
+      const callPayload = {
         name: options.name,
         instructions: options.instructions,
         input: options.input,
@@ -259,7 +264,11 @@ export class OpperClient {
         ...(outputSchema && { outputSchema }),
         ...(options.model && { model: options.model }),
         ...(options.parentSpanId && { parentSpanId: options.parentSpanId }),
-      });
+      };
+
+      const response = options.signal
+        ? await this.client.call(callPayload, { signal: options.signal })
+        : await this.client.call(callPayload);
 
       // Parse usage information
       const usagePayload = extractUsage(response);
@@ -296,7 +305,7 @@ export class OpperClient {
       const inputSchema = this.toJsonSchema(options.inputSchema);
       const outputSchema = this.toJsonSchema(options.outputSchema);
 
-      const response = await this.client.stream({
+      const streamPayload = {
         name: options.name,
         instructions: options.instructions,
         input: options.input,
@@ -304,7 +313,11 @@ export class OpperClient {
         ...(outputSchema && { outputSchema }),
         ...(options.model && { model: options.model }),
         ...(options.parentSpanId && { parentSpanId: options.parentSpanId }),
-      });
+      };
+
+      const response = options.signal
+        ? await this.client.stream(streamPayload, { signal: options.signal })
+        : await this.client.stream(streamPayload);
 
       const iterable: AsyncIterable<OpperStreamEvent> = {
         async *[Symbol.asyncIterator]() {

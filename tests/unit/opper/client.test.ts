@@ -11,6 +11,7 @@ import { getUserAgent } from "@/utils/version";
 
 // Create mock functions at module level
 const mockCall = vi.fn();
+const mockStream = vi.fn();
 const mockSpansCreate = vi.fn();
 const mockSpansUpdate = vi.fn();
 const mockOpperConstructor = vi.fn();
@@ -22,6 +23,7 @@ vi.mock("opperai", () => {
       mockOpperConstructor(options);
       return {
         call: mockCall,
+        stream: mockStream,
         spans: {
           create: mockSpansCreate,
           update: mockSpansUpdate,
@@ -38,6 +40,7 @@ describe("OpperClient", () => {
     // Reset mocks
     vi.clearAllMocks();
     mockCall.mockClear();
+    mockStream.mockClear();
     mockSpansCreate.mockClear();
     mockSpansUpdate.mockClear();
     mockOpperConstructor.mockClear();
@@ -278,6 +281,68 @@ describe("OpperClient", () => {
           total: 0,
         },
       });
+    });
+
+    it("forwards AbortSignal when provided", async () => {
+      mockCall.mockResolvedValue({
+        message: "cancel-ready",
+        spanId: "span-signal",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+      const controller = new AbortController();
+
+      await client.call({
+        name: "abortable-call",
+        instructions: "test cancellation",
+        input: {},
+        signal: controller.signal,
+      });
+
+      expect(mockCall).toHaveBeenCalled();
+      const callArgs = mockCall.mock.calls[0];
+      expect(callArgs).toBeDefined();
+      if (!callArgs) {
+        throw new Error("Expected call arguments to be recorded");
+      }
+      expect(callArgs[1]).toEqual({ signal: controller.signal });
+    });
+  });
+
+  describe("stream", () => {
+    it("forwards AbortSignal to underlying stream call", async () => {
+      mockStream.mockResolvedValue({
+        headers: {},
+        result: {
+          async *[Symbol.asyncIterator]() {
+            yield { data: { delta: "chunk" } };
+          },
+        },
+      });
+
+      const controller = new AbortController();
+
+      const response = await client.stream({
+        name: "stream-with-signal",
+        instructions: "stream something",
+        input: {},
+        signal: controller.signal,
+      });
+
+      expect(mockStream).toHaveBeenCalled();
+      const streamArgs = mockStream.mock.calls[0];
+      expect(streamArgs).toBeDefined();
+      if (!streamArgs) {
+        throw new Error("Expected stream arguments to be recorded");
+      }
+      expect(streamArgs[1]).toEqual({ signal: controller.signal });
+
+      const events: unknown[] = [];
+      for await (const evt of response.result) {
+        events.push(evt);
+      }
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ data: { delta: "chunk" } });
     });
   });
 

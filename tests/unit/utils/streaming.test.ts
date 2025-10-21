@@ -69,4 +69,67 @@ describe("StreamAssembler", () => {
       confidence: 0.85,
     });
   });
+
+  it("skips chunks with missing deltas", () => {
+    const assembler = createStreamAssembler();
+
+    const first = assembler.feed({ delta: "Task", jsonPath: "_root" });
+    const skipped = assembler.feed({ delta: undefined, jsonPath: "_root" });
+
+    expect(first?.accumulated).toBe("Task");
+    expect(skipped).toBeNull();
+
+    const finalize = assembler.finalize();
+    expect(finalize.type).toBe("root");
+    expect(finalize.rootText).toBe("Task");
+  });
+
+  it("treats malformed JSON paths as literal keys", () => {
+    const assembler = createStreamAssembler();
+
+    assembler.feed({
+      delta: "42",
+      jsonPath: "response.steps[not-an-index].count",
+    });
+
+    const finalize = assembler.finalize();
+    expect(finalize.type).toBe("structured");
+    const structured = finalize.structured as Record<string, unknown>;
+    expect(structured).toEqual({
+      response: {
+        "steps[not-an-index]": {
+          count: 42,
+        },
+      },
+    });
+  });
+
+  it("preserves partial state when a stream is aborted mid-field", () => {
+    const assembler = createStreamAssembler();
+
+    assembler.feed({
+      delta: "Progress: ",
+      jsonPath: "_root",
+    });
+    assembler.feed({
+      delta: "50",
+      jsonPath: "metrics.completion",
+    });
+    // Simulate abort by not feeding the remaining chunks.
+
+    const snapshot = assembler.snapshot();
+    expect(snapshot).toEqual({
+      _root: "Progress: ",
+      "metrics.completion": "50",
+    });
+
+    const finalize = assembler.finalize();
+    expect(finalize.type).toBe("structured");
+    const structured = finalize.structured as Record<string, unknown>;
+    expect(structured).toEqual({
+      metrics: {
+        completion: 50,
+      },
+    });
+  });
 });
