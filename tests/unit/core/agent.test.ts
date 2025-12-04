@@ -50,6 +50,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       // Mock final result generation
@@ -106,6 +107,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = {
@@ -168,6 +170,7 @@ describe("Agent", () => {
         ],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       // Second think step - complete with results (empty toolCalls)
@@ -176,6 +179,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = { answer: "Found information", source: "search" };
@@ -254,6 +258,7 @@ describe("Agent", () => {
         ],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const secondDecision: AgentDecision = {
@@ -261,6 +266,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = { status: "completed with errors" };
@@ -320,6 +326,7 @@ describe("Agent", () => {
         ],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const secondDecision: AgentDecision = {
@@ -327,6 +334,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = { status: "completed" };
@@ -389,6 +397,7 @@ describe("Agent", () => {
         ],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const dummyTool: Tool<unknown, unknown> = {
@@ -485,15 +494,12 @@ describe("Agent", () => {
       agent.registerHook(HookEvents.StreamStart, ({ callType }) => {
         hookEvents.push({ event: "start", callType });
       });
-      agent.registerHook(
-        HookEvents.StreamEnd,
-        ({ callType, fieldBuffers }) => {
-          hookEvents.push({ event: "end", callType });
-          if (callType === "think") {
-            expect(fieldBuffers["reasoning"]).toBe("Task is complete");
-          }
-        },
-      );
+      agent.registerHook(HookEvents.StreamEnd, ({ callType, fieldBuffers }) => {
+        hookEvents.push({ event: "end", callType });
+        if (callType === "think") {
+          expect(fieldBuffers["reasoning"]).toBe("Task is complete");
+        }
+      });
 
       const emitterSpy = vi.fn();
       agent.on(HookEvents.StreamChunk, (payload) => {
@@ -633,6 +639,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = { done: true };
@@ -680,6 +687,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = { result: "done" };
@@ -733,6 +741,7 @@ describe("Agent", () => {
         ],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const secondDecision: AgentDecision = {
@@ -740,6 +749,7 @@ describe("Agent", () => {
         toolCalls: [],
         memoryReads: [],
         memoryUpdates: {},
+        isComplete: false,
       };
 
       const mockFinalResult = { result: "HELLO" };
@@ -790,6 +800,7 @@ describe("Agent", () => {
           favorite_color: { value: "blue", description: "User favorite color" },
           favorite_number: { value: 42 },
         },
+        isComplete: false,
       };
 
       const finalResult = {

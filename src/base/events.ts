@@ -75,9 +75,8 @@ export class AgentEventEmitter {
     payload: AgentEventPayload<E>,
   ): void {
     const listeners = Array.from(
-      (this.registry.get(event) as
-        | Set<AgentEventListener<E>>
-        | undefined) ?? new Set<AgentEventListener<E>>(),
+      (this.registry.get(event) as Set<AgentEventListener<E>> | undefined) ??
+        new Set<AgentEventListener<E>>(),
     );
 
     if (listeners.length === 0) {

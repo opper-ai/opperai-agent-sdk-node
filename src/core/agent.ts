@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import {
-  AgentDecisionSchema,
   type AgentDecision,
   type ToolExecutionSummary,
   ToolExecutionSummarySchema,
+  createAgentDecisionWithOutputSchema,
 } from "./schemas";
 import { BaseAgent, type BaseAgentConfig } from "../base/agent";
 import type { AgentContext } from "../base/context";
@@ -29,7 +29,33 @@ const isToolSuccessResult = (value: unknown): value is ToolSuccess<unknown> => {
 };
 
 /**
- * Configuration for the core Agent
+ * Configuration for the core Agent.
+ *
+ * Extends {@link BaseAgentConfig} with additional options for Opper client, logging, and verbosity.
+ *
+ * @template TInput - The expected input type for the agent
+ * @template TOutput - The expected output type from the agent
+ *
+ * @property {string} name - Unique name identifying this agent (required)
+ * @property {string} [description] - Human-readable description of the agent's purpose
+ * @property {string} [instructions] - System instructions guiding agent behavior
+ * @property {Array<Tool<any, any> | ToolProvider>} [tools] - Tools available to the agent
+ * @property {number} [maxIterations=25] - Maximum iterations before terminating
+ * @property {string | readonly string[]} [model='gcp/gemini-flash-latest'] - Model identifier(s)
+ * @property {ZodType<TInput>} [inputSchema] - Zod schema for input validation
+ * @property {ZodType<TOutput>} [outputSchema] - Zod schema for output validation
+ * @property {boolean} [enableStreaming=false] - Enable streaming for LLM calls
+ * @property {boolean} [enableMemory=false] - Enable memory subsystem
+ * @property {Memory} [memory] - Custom memory implementation
+ * @property {Record<string, unknown>} [metadata] - Additional metadata
+ * @property {OpperClientConfig} [opperConfig] - Opper API configuration (apiKey, baseUrl)
+ * @property {OpperClient} [opperClient] - Custom Opper client instance
+ * @property {AgentLogger} [logger] - Logger instance for debugging
+ * @property {boolean} [verbose=false] - Enable verbose logging
+ * @property {Function} [onStreamStart] - Handler invoked when streaming starts
+ * @property {Function} [onStreamChunk] - Handler invoked for each streaming chunk
+ * @property {Function} [onStreamEnd] - Handler invoked when streaming ends
+ * @property {Function} [onStreamError] - Handler invoked on streaming errors
  */
 export interface AgentConfig<TInput, TOutput>
   extends BaseAgentConfig<TInput, TOutput> {
@@ -39,12 +65,12 @@ export interface AgentConfig<TInput, TOutput>
   opperClient?: OpperClient;
 
   /**
-   * Logger instance
+   * Logger instance for debugging and monitoring
    */
   logger?: AgentLogger;
 
   /**
-   * Verbose logging
+   * Enable verbose logging (default: false)
    */
   verbose?: boolean;
 }
@@ -52,6 +78,45 @@ export interface AgentConfig<TInput, TOutput>
 /**
  * Core Agent implementation with "while tools > 0" loop.
  * Implements think → tool execution → memory handling cycle.
+ *
+ * @template TInput - The expected input type for the agent
+ * @template TOutput - The expected output type from the agent
+ *
+ * @example
+ * ```typescript
+ * import { Agent } from 'opperai-agent-sdk-node';
+ *
+ * const agent = new Agent({
+ *   name: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: 'gpt-4',
+ *   tools: [myTool],
+ *   maxIterations: 10,
+ *   enableMemory: true,
+ * });
+ *
+ * const result = await agent.process('Hello!');
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // With typed input/output and schemas
+ * import { Agent } from 'opperai-agent-sdk-node';
+ * import { z } from 'zod';
+ *
+ * const inputSchema = z.object({ query: z.string() });
+ * const outputSchema = z.object({ answer: z.string(), confidence: z.number() });
+ *
+ * const agent = new Agent<
+ *   z.infer<typeof inputSchema>,
+ *   z.infer<typeof outputSchema>
+ * >({
+ *   name: 'typed-agent',
+ *   instructions: 'Answer questions with confidence scores',
+ *   inputSchema,
+ *   outputSchema,
+ * });
+ * ```
  */
 export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
   TInput,
@@ -61,6 +126,31 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
   private readonly logger: AgentLogger;
   private readonly verbose: boolean;
 
+  /**
+   * Creates a new Agent instance
+   *
+   * @param config - Agent configuration object
+   * @param config.name - Unique name identifying this agent (required)
+   * @param config.description - Human-readable description of the agent's purpose
+   * @param config.instructions - System instructions guiding agent behavior
+   * @param config.tools - Array of tools or tool providers available to the agent
+   * @param config.maxIterations - Maximum iterations before terminating (default: 25)
+   * @param config.model - Model identifier(s) as string or array for fallback (default: "gcp/gemini-flash-latest")
+   * @param config.inputSchema - Zod schema for input validation
+   * @param config.outputSchema - Zod schema for output validation
+   * @param config.enableStreaming - Enable streaming for LLM calls (default: false)
+   * @param config.enableMemory - Enable memory subsystem (default: false)
+   * @param config.memory - Custom memory implementation (defaults to InMemoryStore if enableMemory is true)
+   * @param config.metadata - Additional metadata for the agent
+   * @param config.opperConfig - Opper API configuration (apiKey, baseUrl)
+   * @param config.opperClient - Custom Opper client instance (for testing or custom configuration)
+   * @param config.logger - Logger instance for debugging
+   * @param config.verbose - Enable verbose logging (default: false)
+   * @param config.onStreamStart - Handler invoked when streaming starts
+   * @param config.onStreamChunk - Handler invoked for each streaming chunk
+   * @param config.onStreamEnd - Handler invoked when streaming ends
+   * @param config.onStreamError - Handler invoked on streaming errors
+   */
   constructor(config: AgentConfig<TInput, TOutput>) {
     super(config);
 
@@ -137,6 +227,59 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
             input,
             context,
           );
+
+          // Check for immediate completion with final result (single LLM call pattern)
+          if (decision.isComplete && decision.finalResult !== undefined) {
+            this.log("Task completed with final result in single call", {
+              iteration: currentIteration,
+            });
+
+            // finalResult is already validated by the dynamic schema during parsing
+            // Just need to ensure it's the correct type
+            let finalResult: TOutput;
+
+            // If outputSchema is specified, verify the type
+            if (this.outputSchema) {
+              // Check if it's already been validated (is the correct shape)
+              // The dynamic schema already validated it during decisionSchema.parse()
+              // We just do a safeParse to be defensive
+              const parseResult = this.outputSchema.safeParse(
+                decision.finalResult,
+              );
+              if (parseResult.success) {
+                finalResult = parseResult.data as TOutput;
+              } else {
+                // If validation fails, fall back to generating final result
+                this.logger.warn(
+                  "Final result validation against output schema failed, falling back to generate_final_result",
+                  { error: parseResult.error.message },
+                );
+                break; // Exit loop to fall through to generateFinalResult
+              }
+            } else {
+              // Without outputSchema, the expected return type is string
+              // Convert finalResult to string if it's not already
+              const rawResult = decision.finalResult;
+              if (typeof rawResult === "string") {
+                finalResult = rawResult as TOutput;
+              } else if (rawResult === null || rawResult === undefined) {
+                finalResult = "" as TOutput;
+              } else if (typeof rawResult === "object") {
+                // Convert objects to JSON string for consistent handling
+                finalResult = JSON.stringify(rawResult) as TOutput;
+              } else {
+                finalResult = String(rawResult) as TOutput;
+              }
+            }
+
+            // Update parent span with final output
+            await this.opperClient.updateSpan(parentSpan.id, finalResult);
+
+            // Hook: loop_end before returning
+            await this.triggerHook(HookEvents.LoopEnd, { context });
+
+            return finalResult;
+          }
 
           // Step 2: Handle memory actions (Phase 7 integration point)
           const memoryResults = await this.handleMemoryActions(
@@ -221,14 +364,21 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
     input: TInput,
     context: AgentContext,
   ): Promise<{ decision: AgentDecision; spanId?: string }> {
-    const spanName = "think";
+    // Generate dynamic function name: think_{agent_name} (sanitized)
+    const sanitizedName = this.name.toLowerCase().replace(/[\s-]/g, "_");
+    const spanName = `think_${sanitizedName}`;
     this.log("Think step", { iteration: context.iteration });
 
     // Trigger hook: llm_call
     await this.triggerHook(HookEvents.LlmCall, { context, callType: "think" });
 
+    // Create dynamic schema with typed finalResult if outputSchema is specified
+    const decisionSchema = createAgentDecisionWithOutputSchema(
+      this.outputSchema,
+    );
+
     if (this.enableStreaming) {
-      return this.thinkStreaming(input, context);
+      return this.thinkStreaming(input, context, decisionSchema, spanName);
     }
 
     try {
@@ -238,7 +388,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       // Build dynamic context (execution history, tools, memory, etc.)
       const thinkContext = await this.buildThinkContext(input, context);
 
-      // Call Opper with structured output
+      // Call Opper with structured output (dynamic schema includes typed finalResult)
       const response = await this.opperClient.call<
         typeof thinkContext,
         AgentDecision
@@ -246,7 +396,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         name: spanName,
         instructions,
         input: thinkContext,
-        outputSchema: AgentDecisionSchema as z.ZodType<AgentDecision>,
+        outputSchema: decisionSchema as unknown as z.ZodType<AgentDecision>,
         model: this.model,
         ...(context.parentSpanId && { parentSpanId: context.parentSpanId }),
       });
@@ -260,8 +410,10 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         cost: response.usage.cost,
       });
 
-      // Parse and validate decision
-      const decision = AgentDecisionSchema.parse(response.jsonPayload);
+      // Parse and validate decision (using dynamic schema which validates finalResult)
+      const decision = decisionSchema.parse(
+        response.jsonPayload,
+      ) as AgentDecision;
 
       // Trigger hook: llm_response
       await this.triggerHook(HookEvents.LlmResponse, {
@@ -295,12 +447,13 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
   private async thinkStreaming(
     input: TInput,
     context: AgentContext,
+    decisionSchema: z.ZodObject<z.ZodRawShape>,
+    spanName: string,
   ): Promise<{ decision: AgentDecision; spanId?: string }> {
-    const spanName = "think";
     const instructions = this.buildThinkInstructions();
     const thinkContext = await this.buildThinkContext(input, context);
     const assembler = createStreamAssembler({
-      schema: AgentDecisionSchema as z.ZodType<AgentDecision>,
+      schema: decisionSchema as unknown as z.ZodType<AgentDecision>,
     });
     let streamSpanId: string | undefined;
 
@@ -321,7 +474,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         name: spanName,
         instructions,
         input: thinkContext,
-        outputSchema: AgentDecisionSchema as z.ZodType<AgentDecision>,
+        outputSchema: decisionSchema as unknown as z.ZodType<AgentDecision>,
         model: this.model,
         ...(context.parentSpanId && { parentSpanId: context.parentSpanId }),
       });
@@ -374,13 +527,13 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       let decision: AgentDecision;
       if (finalize.type === "structured" && finalize.structured) {
-        decision = AgentDecisionSchema.parse(
+        decision = decisionSchema.parse(
           finalize.structured as Record<string, unknown>,
-        );
+        ) as AgentDecision;
       } else {
-        decision = AgentDecisionSchema.parse({
-          reasoning: finalize.type === "root" ? finalize.rootText ?? "" : "",
-        });
+        decision = decisionSchema.parse({
+          reasoning: finalize.type === "root" ? (finalize.rootText ?? "") : "",
+        }) as AgentDecision;
       }
 
       const usageTracked = await this.trackStreamingUsageBySpan(
@@ -451,12 +604,17 @@ YOUR TASK:
 1. Analyze the current situation
 2. Decide if the goal is complete or more actions are needed
 3. If more actions needed: specify tools to call
-4. If goal complete: return empty tool_calls list
+4. If goal complete:
+   - Set isComplete=true
+   - Provide the complete answer/output in finalResult
+   - Leave toolCalls empty
 
 IMPORTANT:
-- Return empty toolCalls array when task is COMPLETE
+- When task is COMPLETE, you MUST set isComplete=true AND provide finalResult
+- The finalResult should be a complete, well-structured answer based on all work done
 - Only use available tools
-- Provide clear reasoning for each decision`;
+- Provide clear reasoning for each decision
+- If an outputSchema was specified, ensure finalResult matches that schema`;
 
     // Add memory instructions if enabled
     if (this.enableMemory) {
@@ -891,6 +1049,10 @@ Follow any instructions provided for formatting and style.`;
     }
 
     try {
+      // Generate dynamic function name for better traceability
+      const sanitizedName = this.name.toLowerCase().replace(/[\s-]/g, "_");
+      const functionName = `generate_final_result_${sanitizedName}`;
+
       // Call Opper to generate final result
       const callOptions: {
         name: string;
@@ -900,7 +1062,7 @@ Follow any instructions provided for formatting and style.`;
         parentSpanId?: string;
         outputSchema?: z.ZodType<TOutput>;
       } = {
-        name: "generate_final_result",
+        name: functionName,
         instructions,
         input: finalContext,
         model: this.model,
@@ -979,11 +1141,15 @@ Follow any instructions provided for formatting and style.`;
     });
 
     try {
+      // Generate dynamic function name for better traceability
+      const sanitizedName = this.name.toLowerCase().replace(/[\s-]/g, "_");
+      const functionName = `generate_final_result_${sanitizedName}`;
+
       const streamResponse = await this.opperClient.stream<
         typeof finalContext,
         TOutput
       >({
-        name: "generate_final_result",
+        name: functionName,
         instructions,
         input: finalContext,
         model: this.model,
@@ -1039,7 +1205,10 @@ Follow any instructions provided for formatting and style.`;
 
       let result: TOutput;
       if (this.outputSchema) {
-        if (finalize.type !== "structured" || finalize.structured === undefined) {
+        if (
+          finalize.type !== "structured" ||
+          finalize.structured === undefined
+        ) {
           throw new Error(
             "Streaming response did not provide structured data for the configured output schema.",
           );
@@ -1144,7 +1313,8 @@ Follow any instructions provided for formatting and style.`;
         const totalTokensRaw =
           typeof primaryTotal === "number" && Number.isFinite(primaryTotal)
             ? primaryTotal
-            : typeof fallbackTotal === "number" && Number.isFinite(fallbackTotal)
+            : typeof fallbackTotal === "number" &&
+                Number.isFinite(fallbackTotal)
               ? fallbackTotal
               : undefined;
 
