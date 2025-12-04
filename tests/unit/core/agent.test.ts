@@ -21,6 +21,19 @@ const mockUsage = (inputTokens: number, outputTokens: number) => ({
   },
 });
 
+// Helper to create a mock decision with all required fields
+const createMockDecision = (
+  overrides: Partial<AgentDecision> = {},
+): AgentDecision => ({
+  reasoning: "Mock reasoning",
+  userMessage: "Working on it...",
+  toolCalls: [],
+  memoryReads: [],
+  memoryUpdates: {},
+  isComplete: false,
+  ...overrides,
+});
+
 // Mock OpperClient
 vi.mock("../../../src/opper/client", () => {
   const OpperClient = vi.fn();
@@ -45,13 +58,9 @@ describe("Agent", () => {
   describe("Basic agent execution", () => {
     it("should complete simple task without tools", async () => {
       // Mock Opper response for think step - immediate completion (empty toolCalls)
-      const mockDecision: AgentDecision = {
+      const mockDecision = createMockDecision({
         reasoning: "Task is straightforward, no tools needed",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       // Mock final result generation
       const mockFinalResult = { result: "Task completed successfully" };
@@ -102,13 +111,9 @@ describe("Agent", () => {
         timestamp: z.number(),
       });
 
-      const mockDecision: AgentDecision = {
+      const mockDecision = createMockDecision({
         reasoning: "Generating greeting with timestamp",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = {
         greeting: "Hello, world!",
@@ -159,7 +164,7 @@ describe("Agent", () => {
       };
 
       // First think step - decide to use tool
-      const firstDecision: AgentDecision = {
+      const firstDecision = createMockDecision({
         reasoning: "Need to search for information",
         toolCalls: [
           {
@@ -168,19 +173,12 @@ describe("Agent", () => {
             arguments: { query: "test query" },
           },
         ],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       // Second think step - complete with results (empty toolCalls)
-      const secondDecision: AgentDecision = {
+      const secondDecision = createMockDecision({
         reasoning: "Got search results, can now complete",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { answer: "Found information", source: "search" };
 
@@ -248,7 +246,7 @@ describe("Agent", () => {
         },
       };
 
-      const firstDecision: AgentDecision = {
+      const firstDecision = createMockDecision({
         reasoning: "Trying to use a tool",
         toolCalls: [
           {
@@ -257,18 +255,11 @@ describe("Agent", () => {
             arguments: { input: "test" },
           },
         ],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
-      const secondDecision: AgentDecision = {
+      const secondDecision = createMockDecision({
         reasoning: "Tool failed, but continuing anyway",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { status: "completed with errors" };
 
@@ -316,7 +307,7 @@ describe("Agent", () => {
     });
 
     it("should handle tool not found error", async () => {
-      const firstDecision: AgentDecision = {
+      const firstDecision = createMockDecision({
         reasoning: "Trying to use non-existent tool",
         toolCalls: [
           {
@@ -325,18 +316,11 @@ describe("Agent", () => {
             arguments: {},
           },
         ],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
-      const secondDecision: AgentDecision = {
+      const secondDecision = createMockDecision({
         reasoning: "Tool not found, completing anyway",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { status: "completed" };
 
@@ -387,7 +371,7 @@ describe("Agent", () => {
   describe("Max iterations", () => {
     it("should throw error when max iterations exceeded", async () => {
       // Always return a decision that requires more tools
-      const neverCompleteDecision: AgentDecision = {
+      const neverCompleteDecision = createMockDecision({
         reasoning: "Need more iterations",
         toolCalls: [
           {
@@ -396,10 +380,7 @@ describe("Agent", () => {
             arguments: {},
           },
         ],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const dummyTool: Tool<unknown, unknown> = {
         name: "dummy_tool",
@@ -635,13 +616,9 @@ describe("Agent", () => {
 
   describe("Context and usage tracking", () => {
     it("should track token usage across iterations", async () => {
-      const firstDecision: AgentDecision = {
+      const firstDecision = createMockDecision({
         reasoning: "Task complete",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { done: true };
 
@@ -683,13 +660,9 @@ describe("Agent", () => {
 
   describe("Hooks integration", () => {
     it("should trigger agent lifecycle hooks", async () => {
-      const mockDecision: AgentDecision = {
+      const mockDecision = createMockDecision({
         reasoning: "Complete immediately",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { result: "done" };
 
@@ -722,6 +695,47 @@ describe("Agent", () => {
       expect(endHook).toHaveBeenCalledTimes(1);
     });
 
+    it("should pass userMessage in THINK_END hook", async () => {
+      const mockDecision: AgentDecision = {
+        reasoning: "Processing the request",
+        userMessage: "Analyzing your question...",
+        toolCalls: [],
+        memoryReads: [],
+        memoryUpdates: {},
+        isComplete: false,
+      };
+
+      const mockFinalResult = { result: "done" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: mockDecision,
+          spanId: "span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          spanId: "span-2",
+          usage: mockUsage(50, 25),
+        });
+
+      const agent = new Agent({
+        name: "UserMessageAgent",
+        opperClient: mockOpperClient,
+      });
+
+      let capturedThought: { reasoning: string; userMessage: string } | undefined;
+      agent.registerHook(HookEvents.ThinkEnd, ({ thought }) => {
+        capturedThought = thought as { reasoning: string; userMessage: string };
+      });
+
+      await agent.process({ task: "test" });
+
+      expect(capturedThought).toBeDefined();
+      expect(capturedThought?.reasoning).toBe("Processing the request");
+      expect(capturedThought?.userMessage).toBe("Analyzing your question...");
+    });
+
     it("should trigger tool hooks", async () => {
       const tool: Tool<{ input: string }, { output: string }> = {
         name: "test_tool",
@@ -731,7 +745,7 @@ describe("Agent", () => {
           }),
       };
 
-      const firstDecision: AgentDecision = {
+      const firstDecision = createMockDecision({
         reasoning: "Using tool",
         toolCalls: [
           {
@@ -740,18 +754,11 @@ describe("Agent", () => {
             arguments: { input: "hello" },
           },
         ],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
-      const secondDecision: AgentDecision = {
+      const secondDecision = createMockDecision({
         reasoning: "Done",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { result: "HELLO" };
 
@@ -793,16 +800,13 @@ describe("Agent", () => {
 
   describe("Memory integration", () => {
     it("records memory operations in execution history and final context", async () => {
-      const memoryDecision: AgentDecision = {
+      const memoryDecision = createMockDecision({
         reasoning: "Store user preferences",
-        toolCalls: [],
-        memoryReads: [],
         memoryUpdates: {
           favorite_color: { value: "blue", description: "User favorite color" },
           favorite_number: { value: 42 },
         },
-        isComplete: false,
-      };
+      });
 
       const finalResult = {
         summary: "Stored preferences",
@@ -879,13 +883,9 @@ describe("Agent", () => {
 
   describe("Span timing and naming", () => {
     it("should rename think span to 'think' after call", async () => {
-      const mockDecision: AgentDecision = {
+      const mockDecision = createMockDecision({
         reasoning: "Task complete",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { done: true };
 
@@ -925,23 +925,16 @@ describe("Agent", () => {
           ToolResultFactory.success("search", { results: ["result1"] }),
       };
 
-      const firstDecision: AgentDecision = {
+      const firstDecision = createMockDecision({
         reasoning: "Need to search",
         toolCalls: [
           { id: "call-1", toolName: "search", arguments: { query: "test" } },
         ],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
-      const secondDecision: AgentDecision = {
+      const secondDecision = createMockDecision({
         reasoning: "Done",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
-        isComplete: false,
-      };
+      });
 
       const mockFinalResult = { answer: "Found it" };
 
@@ -990,14 +983,11 @@ describe("Agent", () => {
     });
 
     it("should include timing data when updating agent execution span", async () => {
-      const mockDecision: AgentDecision = {
+      const mockDecision = createMockDecision({
         reasoning: "Immediate completion",
-        toolCalls: [],
-        memoryReads: [],
-        memoryUpdates: {},
         isComplete: true,
         finalResult: { result: "done" },
-      };
+      });
 
       vi.spyOn(mockOpperClient, "call").mockResolvedValueOnce({
         jsonPayload: mockDecision,
