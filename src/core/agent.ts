@@ -200,6 +200,9 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       tools: Array.from(this.tools.keys()),
     });
 
+    // Record start time for agent execution timing
+    const executionStartTime = new Date();
+
     // Create parent span for this agent execution
     const parentSpan = await this.opperClient.createSpan({
       name: `${this.name}_execution`,
@@ -272,8 +275,15 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
               }
             }
 
-            // Update parent span with final output
-            await this.opperClient.updateSpan(parentSpan.id, finalResult);
+            // Update parent span with final output and timing
+            const executionEndTime = new Date();
+            await this.opperClient.updateSpan(parentSpan.id, finalResult, {
+              startTime: executionStartTime,
+              endTime: executionEndTime,
+              meta: {
+                durationMs: executionEndTime.getTime() - executionStartTime.getTime(),
+              },
+            });
 
             // Hook: loop_end before returning
             await this.triggerHook(HookEvents.LoopEnd, { context });
@@ -345,14 +355,27 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       // Generate final result
       const result = await this.generateFinalResult(input, context);
 
-      // Update parent span with final output
-      await this.opperClient.updateSpan(parentSpan.id, result);
+      // Update parent span with final output and timing
+      const executionEndTime = new Date();
+      await this.opperClient.updateSpan(parentSpan.id, result, {
+        startTime: executionStartTime,
+        endTime: executionEndTime,
+        meta: {
+          durationMs: executionEndTime.getTime() - executionStartTime.getTime(),
+        },
+      });
 
       return result;
     } catch (error) {
-      // Update parent span with error
+      // Update parent span with error and timing
+      const executionEndTime = new Date();
       await this.opperClient.updateSpan(parentSpan.id, undefined, {
         error: error instanceof Error ? error.message : String(error),
+        startTime: executionStartTime,
+        endTime: executionEndTime,
+        meta: {
+          durationMs: executionEndTime.getTime() - executionStartTime.getTime(),
+        },
       });
       throw error;
     }
