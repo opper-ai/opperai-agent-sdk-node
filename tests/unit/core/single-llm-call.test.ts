@@ -17,6 +17,19 @@ const mockUsage = (inputTokens: number, outputTokens: number) => ({
   },
 });
 
+// Helper to create a mock decision with all required fields
+const createMockDecision = (
+  overrides: Partial<AgentDecision> = {},
+): AgentDecision => ({
+  reasoning: "Mock reasoning",
+  userMessage: "Working on it...",
+  toolCalls: [],
+  memoryReads: [],
+  memoryUpdates: {},
+  isComplete: false,
+  ...overrides,
+});
+
 // Mock OpperClient
 vi.mock("../../../src/opper/client", () => {
   const OpperClient = vi.fn();
@@ -40,14 +53,11 @@ describe("Agent - Single LLM Call Pattern", () => {
 
   it("should return immediate response with finalResult in single LLM call", async () => {
     // Mock decision with isComplete=true and finalResult
-    const mockDecision: AgentDecision = {
+    const mockDecision = createMockDecision({
       reasoning: "This is a simple factual question I can answer directly",
       isComplete: true,
       finalResult: "The capital of France is Paris",
-      toolCalls: [],
-      memoryReads: [],
-      memoryUpdates: {},
-    };
+    });
 
     vi.spyOn(mockOpperClient, "call").mockResolvedValueOnce({
       jsonPayload: mockDecision,
@@ -78,17 +88,14 @@ describe("Agent - Single LLM Call Pattern", () => {
       confidence: z.number(),
     });
 
-    const mockDecision: AgentDecision = {
+    const mockDecision = createMockDecision({
       reasoning: "I can provide a direct answer with confidence",
       isComplete: true,
       finalResult: {
         answer: "Python is a high-level programming language",
         confidence: 0.95,
       },
-      toolCalls: [],
-      memoryReads: [],
-      memoryUpdates: {},
-    };
+    });
 
     vi.spyOn(mockOpperClient, "call").mockResolvedValueOnce({
       jsonPayload: mockDecision,
@@ -122,7 +129,7 @@ describe("Agent - Single LLM Call Pattern", () => {
     });
 
     // First call: decide to use tool
-    const firstDecision: AgentDecision = {
+    const firstDecision = createMockDecision({
       reasoning: "I need to calculate this sum",
       isComplete: false,
       finalResult: undefined,
@@ -133,19 +140,14 @@ describe("Agent - Single LLM Call Pattern", () => {
           arguments: { a: 5, b: 3 },
         },
       ],
-      memoryReads: [],
-      memoryUpdates: {},
-    };
+    });
 
     // Second call: task complete with result
-    const secondDecision: AgentDecision = {
+    const secondDecision = createMockDecision({
       reasoning: "I have calculated the sum successfully",
       isComplete: true,
       finalResult: { result: 8, explanation: "5 + 3 = 8" },
-      toolCalls: [],
-      memoryReads: [],
-      memoryUpdates: {},
-    };
+    });
 
     vi.spyOn(mockOpperClient, "call")
       .mockResolvedValueOnce({
@@ -189,13 +191,11 @@ describe("Agent - Single LLM Call Pattern", () => {
 
   it("should support backward compatibility (empty toolCalls without finalResult)", async () => {
     // Old-style response: no isComplete/finalResult fields
-    const firstDecision: AgentDecision = {
+    const firstDecision = createMockDecision({
       reasoning: "Task is done",
-      toolCalls: [], // Empty means complete in old pattern
-      memoryReads: [],
-      memoryUpdates: {},
+      // Empty toolCalls means complete in old pattern
       isComplete: false, // defaults to false, finalResult defaults to undefined
-    };
+    });
 
     const mockFinalResult = "The task has been completed successfully";
 
@@ -229,14 +229,10 @@ describe("Agent - Single LLM Call Pattern", () => {
 
   it("should verify schema has new fields", () => {
     // Test that AgentDecision type includes new fields
-    const decision: AgentDecision = {
-      reasoning: "Test",
-      toolCalls: [],
-      memoryReads: [],
-      memoryUpdates: {},
+    const decision = createMockDecision({
       isComplete: true,
       finalResult: { test: "value" },
-    };
+    });
 
     expect(decision.isComplete).toBe(true);
     expect(decision.finalResult).toEqual({ test: "value" });

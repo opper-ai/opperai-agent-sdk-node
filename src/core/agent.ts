@@ -456,7 +456,10 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       // Trigger hook: think_end
       await this.triggerHook(HookEvents.ThinkEnd, {
         context,
-        thought: { reasoning: decision.reasoning },
+        thought: {
+          reasoning: decision.reasoning,
+          userMessage: decision.userMessage,
+        },
       });
 
       this.log("Think result", {
@@ -597,7 +600,10 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       await this.triggerHook(HookEvents.ThinkEnd, {
         context,
-        thought: { reasoning: decision.reasoning },
+        thought: {
+          reasoning: decision.reasoning,
+          userMessage: decision.userMessage,
+        },
       });
 
       this.log("Think result", {
@@ -652,7 +658,12 @@ IMPORTANT:
 - The finalResult should be a complete, well-structured answer based on all work done
 - Only use available tools
 - Provide clear reasoning for each decision
-- If an outputSchema was specified, ensure finalResult matches that schema`;
+- If an outputSchema was specified, ensure finalResult matches that schema
+
+USER MESSAGE:
+- Always provide a brief, user-friendly status in userMessage
+- This message is shown to users to indicate progress (e.g., "Searching for weather data...", "Calculating results...", "Done!")
+- Keep it concise and informative`;
 
     // Add memory instructions if enabled
     if (this.enableMemory) {

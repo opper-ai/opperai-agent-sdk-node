@@ -81,6 +81,11 @@ export const AgentDecisionSchema = z.object({
   reasoning: z.string(),
 
   /**
+   * Status message for the user (e.g., "Searching for information...", "Processing results...")
+   */
+  userMessage: z.string().default("Working on it..."),
+
+  /**
    * Tool calls to execute (if any)
    * Empty array signals task completion
    */
@@ -136,6 +141,7 @@ export function createAgentDecisionWithOutputSchema<T>(
 
   const dynamicSchema = z.object({
     reasoning: z.string(),
+    userMessage: z.string().default("Working on it..."),
     toolCalls: z.array(ToolCallSchema).default([]),
     memoryReads: z.array(z.string()).default([]),
     memoryUpdates: z.record(MemoryUpdateSchema).default({}),
