@@ -292,10 +292,11 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
           const toolCallStartIndex = context.toolCalls.length;
 
           // Step 3: Execute tool calls (if any)
+          // Tool spans are siblings to think spans (both children of agent execution)
           const toolResults = await this.executeToolCalls(
             decision,
             context,
-            thinkSpanId,
+            context.parentSpanId ?? undefined,
           );
           const combinedResults = [...memoryResults, ...toolResults];
 
@@ -740,6 +741,9 @@ The memory you write persists across all process() calls on this agent.`;
         parameters: toolCall.arguments,
       });
 
+      // Record start time for timing
+      const startTime = new Date();
+
       // Create span for this tool call
       const toolSpan = await this.opperClient.createSpan({
         name: `tool_${toolCall.toolName}`,
@@ -761,15 +765,26 @@ The memory you write persists across all process() calls on this agent.`;
           { spanId: toolSpan.id },
         );
 
-        // Update tool span with result
+        // Record end time and calculate duration
+        const endTime = new Date();
+        const durationMs = endTime.getTime() - startTime.getTime();
+
+        // Update tool span with result and timing
         if (result.success) {
-          await this.opperClient.updateSpan(toolSpan.id, result.output);
+          await this.opperClient.updateSpan(toolSpan.id, result.output, {
+            startTime,
+            endTime,
+            meta: { durationMs },
+          });
         } else {
           await this.opperClient.updateSpan(toolSpan.id, undefined, {
             error:
               result.error instanceof Error
                 ? result.error.message
                 : String(result.error),
+            startTime,
+            endTime,
+            meta: { durationMs },
           });
         }
 
@@ -792,12 +807,20 @@ The memory you write persists across all process() calls on this agent.`;
           `Tool ${toolCall.toolName} ${result.success ? "succeeded" : "failed"}`,
           {
             success: result.success,
+            durationMs,
           },
         );
       } catch (error) {
-        // Update span with error
+        // Record end time even on error
+        const endTime = new Date();
+        const durationMs = endTime.getTime() - startTime.getTime();
+
+        // Update span with error and timing
         await this.opperClient.updateSpan(toolSpan.id, undefined, {
           error: error instanceof Error ? error.message : String(error),
+          startTime,
+          endTime,
+          meta: { durationMs },
         });
 
         // Tool execution threw an error
@@ -811,6 +834,7 @@ The memory you write persists across all process() calls on this agent.`;
 
         this.logger.warn(`Tool ${toolCall.toolName} threw error`, {
           error: error instanceof Error ? error.message : String(error),
+          durationMs,
         });
       }
     }
