@@ -36,6 +36,7 @@
     "test:integration:live": "vitest run tests/integration/opper-live.test.ts",
     "typecheck": "tsc --noEmit",
     "example": "tsx --tsconfig tsconfig.examples.json",
+    "run-examples": "tsx scripts/run-examples.ts",
     "fixtures:generate": "tsx scripts/generate-fixtures.ts"
   },
   "dependencies": {
