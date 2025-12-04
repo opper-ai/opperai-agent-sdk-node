@@ -1,0 +1,72 @@
+name: Beta/Nightly Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      manual_version:
+        description: 'Exact version to publish (e.g., 0.3.0-beta). Overrides other inputs.'
+        required: false
+      tag:
+        description: 'NPM tag (e.g., beta, nightly)'
+        required: true
+        default: 'beta'
+      bump_type:
+        description: 'Semver bump type (patch, minor, major, or none)'
+        required: true
+        default: 'patch'
+
+jobs:
+  beta-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # For NPM provenance
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set Beta Version
+        run: |
+          # Configure git user for npm version command
+          git config --global user.name "opper-bot"
+          git config --global user.email "bot@opper.ai"
+
+          if [ -n "${{ github.event.inputs.manual_version }}" ]; then
+            # CASE 1: Manual version provided (e.g., 0.3.0-beta)
+            echo "🎯 Using manual version: ${{ github.event.inputs.manual_version }}"
+            npm version "${{ github.event.inputs.manual_version }}" --no-git-tag-version
+          else
+            # CASE 2: Auto-generated timestamped version
+            if [ "${{ github.event.inputs.bump_type }}" != "none" ]; then
+              npm version ${{ github.event.inputs.bump_type }} --no-git-tag-version
+            fi
+            BASE_VERSION=$(node -p "require('./package.json').version")
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            COMMIT_HASH=$(git rev-parse --short HEAD)
+            BETA_VERSION="$BASE_VERSION-${{ github.event.inputs.tag }}.$TIMESTAMP.$COMMIT_HASH"
+            
+            npm version $BETA_VERSION --no-git-tag-version
+            echo "🚀 Generated version: $BETA_VERSION"
+          fi
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish to NPM
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "📦 Publishing to tag: ${{ github.event.inputs.tag }}"
+          pnpm publish --tag ${{ github.event.inputs.tag }} --no-git-checks --provenance
