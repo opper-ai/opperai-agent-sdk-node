@@ -876,4 +876,161 @@ describe("Agent", () => {
       );
     });
   });
+
+  describe("Span timing and naming", () => {
+    it("should rename think span to 'think' after call", async () => {
+      const mockDecision: AgentDecision = {
+        reasoning: "Task complete",
+        toolCalls: [],
+        memoryReads: [],
+        memoryUpdates: {},
+        isComplete: false,
+      };
+
+      const mockFinalResult = { done: true };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: mockDecision,
+          spanId: "think-span-123",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          spanId: "final-span",
+          usage: mockUsage(50, 25),
+        });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "TestAgent",
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Check that updateSpan was called to rename the think span
+      expect(updateSpanSpy).toHaveBeenCalledWith(
+        "think-span-123",
+        undefined,
+        expect.objectContaining({ name: "think" }),
+      );
+    });
+
+    it("should include timing data when updating tool spans", async () => {
+      const tool: Tool<{ query: string }, { results: string[] }> = {
+        name: "search",
+        execute: async () =>
+          ToolResultFactory.success("search", { results: ["result1"] }),
+      };
+
+      const firstDecision: AgentDecision = {
+        reasoning: "Need to search",
+        toolCalls: [
+          { id: "call-1", toolName: "search", arguments: { query: "test" } },
+        ],
+        memoryReads: [],
+        memoryUpdates: {},
+        isComplete: false,
+      };
+
+      const secondDecision: AgentDecision = {
+        reasoning: "Done",
+        toolCalls: [],
+        memoryReads: [],
+        memoryUpdates: {},
+        isComplete: false,
+      };
+
+      const mockFinalResult = { answer: "Found it" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: firstDecision,
+          spanId: "think-span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "think-span-2",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          spanId: "final-span",
+          usage: mockUsage(50, 25),
+        });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "TimingAgent",
+        tools: [tool],
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Find the call that updated the tool span (not the think span rename)
+      const toolSpanUpdateCall = updateSpanSpy.mock.calls.find(
+        (call) =>
+          call[0] === "mock-span-id" &&
+          call[2]?.startTime !== undefined &&
+          call[2]?.endTime !== undefined,
+      );
+
+      expect(toolSpanUpdateCall).toBeDefined();
+      if (toolSpanUpdateCall) {
+        const options = toolSpanUpdateCall[2];
+        expect(options?.startTime).toBeInstanceOf(Date);
+        expect(options?.endTime).toBeInstanceOf(Date);
+        expect(options?.meta?.["durationMs"]).toBeTypeOf("number");
+      }
+    });
+
+    it("should include timing data when updating agent execution span", async () => {
+      const mockDecision: AgentDecision = {
+        reasoning: "Immediate completion",
+        toolCalls: [],
+        memoryReads: [],
+        memoryUpdates: {},
+        isComplete: true,
+        finalResult: { result: "done" },
+      };
+
+      vi.spyOn(mockOpperClient, "call").mockResolvedValueOnce({
+        jsonPayload: mockDecision,
+        spanId: "think-span",
+        usage: mockUsage(100, 50),
+      });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "ExecutionTimingAgent",
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Find the call that updated the execution span with timing
+      const executionSpanUpdateCall = updateSpanSpy.mock.calls.find(
+        (call) =>
+          call[0] === "mock-span-id" &&
+          call[2]?.startTime !== undefined &&
+          call[2]?.endTime !== undefined &&
+          call[2]?.meta?.["durationMs"] !== undefined,
+      );
+
+      expect(executionSpanUpdateCall).toBeDefined();
+      if (executionSpanUpdateCall) {
+        const options = executionSpanUpdateCall[2];
+        expect(options?.startTime).toBeInstanceOf(Date);
+        expect(options?.endTime).toBeInstanceOf(Date);
+        expect(options?.meta?.["durationMs"]).toBeTypeOf("number");
+        expect(options?.meta?.["durationMs"]).toBeGreaterThanOrEqual(0);
+      }
+    });
+  });
 });

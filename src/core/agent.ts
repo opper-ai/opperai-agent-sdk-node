@@ -446,6 +446,13 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         response,
       });
 
+      // Rename span to simpler "think" (function name remains detailed for Opper)
+      if (response.spanId) {
+        await this.opperClient.updateSpan(response.spanId, undefined, {
+          name: "think",
+        });
+      }
+
       // Trigger hook: think_end
       await this.triggerHook(HookEvents.ThinkEnd, {
         context,
@@ -580,6 +587,13 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         response: streamResponse,
         parsed: decision,
       });
+
+      // Rename span to simpler "think" (function name remains detailed for Opper)
+      if (streamSpanId) {
+        await this.opperClient.updateSpan(streamSpanId, undefined, {
+          name: "think",
+        });
+      }
 
       await this.triggerHook(HookEvents.ThinkEnd, {
         context,
@@ -767,10 +781,16 @@ The memory you write persists across all process() calls on this agent.`;
       // Record start time for timing
       const startTime = new Date();
 
+      // Check if this tool is an agent-as-tool
+      const tool = this.tools.get(toolCall.toolName);
+      const isAgentTool = tool?.metadata?.["isAgent"] === true;
+      const spanType = isAgentTool ? "🤖 agent" : "🔧 tool";
+
       // Create span for this tool call
       const toolSpan = await this.opperClient.createSpan({
         name: `tool_${toolCall.toolName}`,
         input: toolCall.arguments,
+        type: spanType,
         ...(parentSpanId
           ? { parentSpanId }
           : context.parentSpanId
@@ -904,6 +924,7 @@ The memory you write persists across all process() calls on this agent.`;
 
     // Handle reads first
     if (hasReads) {
+      const startTime = new Date();
       try {
         const keySet = new Set(
           decision.memoryReads.filter(
@@ -916,12 +937,20 @@ The memory you write persists across all process() calls on this agent.`;
           const memoryReadSpan = await this.opperClient.createSpan({
             name: "memory_read",
             input: keys,
+            type: "🧠 memory",
             ...(spanParentId && { parentSpanId: spanParentId }),
           });
 
           const memoryData = await this.memory.read(keys);
 
-          await this.opperClient.updateSpan(memoryReadSpan.id, memoryData);
+          const endTime = new Date();
+          const durationMs = endTime.getTime() - startTime.getTime();
+
+          await this.opperClient.updateSpan(memoryReadSpan.id, memoryData, {
+            startTime,
+            endTime,
+            meta: { durationMs },
+          });
 
           // Store loaded memory in context metadata
           context.setMetadata("current_memory", memoryData);
@@ -970,10 +999,12 @@ The memory you write persists across all process() calls on this agent.`;
 
     // Handle writes
     if (hasWrites) {
+      const startTime = new Date();
       try {
         const memoryWriteSpan = await this.opperClient.createSpan({
           name: "memory_write",
           input: updateEntries.map(([key]) => key),
+          type: "🧠 memory",
           ...(spanParentId && { parentSpanId: spanParentId }),
         });
 
@@ -998,9 +1029,17 @@ The memory you write persists across all process() calls on this agent.`;
           });
         }
 
+        const endTime = new Date();
+        const durationMs = endTime.getTime() - startTime.getTime();
+
         await this.opperClient.updateSpan(
           memoryWriteSpan.id,
           `Successfully wrote ${updateEntries.length} keys`,
+          {
+            startTime,
+            endTime,
+            meta: { durationMs },
+          },
         );
 
         this.log(`Wrote ${updateEntries.length} memory entries`);

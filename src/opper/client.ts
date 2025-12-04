@@ -182,6 +182,7 @@ export interface CreateSpanOptions {
   name: string;
   input?: unknown;
   parentSpanId?: string;
+  type?: string;
 }
 
 /**
@@ -343,6 +344,7 @@ export class OpperClient {
         name: options.name,
         ...(options.input !== undefined && { input: options.input }),
         ...(options.parentSpanId && { parentId: options.parentSpanId }),
+        ...(options.type && { type: options.type }),
       });
 
       return {
@@ -364,6 +366,7 @@ export class OpperClient {
       startTime?: Date;
       endTime?: Date;
       meta?: Record<string, unknown>;
+      name?: string;
     },
   ): Promise<void> {
     return this.withRetry(async () => {
@@ -381,6 +384,7 @@ export class OpperClient {
         ...(options?.startTime && { startTime: options.startTime }),
         ...(options?.endTime && { endTime: options.endTime }),
         ...(options?.meta && { meta: options.meta }),
+        ...(options?.name && { name: options.name }),
       });
     }, `update-span:${spanId}`);
   }
