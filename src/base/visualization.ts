@@ -50,10 +50,7 @@ function sanitizeId(name: string): string {
  */
 function sanitizeLabel(text: string): string {
   // Remove problematic characters
-  let cleaned = text
-    .replace(/"/g, "'")
-    .replace(/\n/g, " ")
-    .replace(/`/g, "");
+  let cleaned = text.replace(/"/g, "'").replace(/\n/g, " ").replace(/`/g, "");
 
   // Take only first sentence
   cleaned = cleaned.split(".")[0]?.trim() || cleaned.trim();

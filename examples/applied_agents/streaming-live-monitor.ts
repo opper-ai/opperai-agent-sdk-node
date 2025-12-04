@@ -61,7 +61,9 @@ const researchTopic = createFunctionTool(
     schema: z.object({
       topic: z
         .string()
-        .describe("The topic we are researching, e.g. 'enterprise AI strategy'"),
+        .describe(
+          "The topic we are researching, e.g. 'enterprise AI strategy'",
+        ),
     }),
   },
 );
@@ -210,9 +212,7 @@ Return a structured analysis with a topic, key findings (3 bullet points), and a
 
     if (finalUsage !== null) {
       const { tokens, requests } = finalUsage;
-      console.log(
-        `\nUsage: ${tokens} tokens across ${requests} request(s)`,
-      );
+      console.log(`\nUsage: ${tokens} tokens across ${requests} request(s)`);
     }
   } catch (error) {
     console.error("The agent failed to complete the task:", error);

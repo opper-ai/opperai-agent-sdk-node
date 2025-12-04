@@ -95,9 +95,56 @@ export const AgentDecisionSchema = z.object({
    * Memory entries to write/update (key -> payload)
    */
   memoryUpdates: z.record(MemoryUpdateSchema).default({}),
+
+  /**
+   * Whether the task is complete and finalResult is available
+   * (single LLM call pattern)
+   */
+  isComplete: z.boolean().default(false),
+
+  /**
+   * The final result when isComplete=true
+   * Should match outputSchema if specified
+   */
+  finalResult: z.unknown().optional(),
 });
 
 export type AgentDecision = z.infer<typeof AgentDecisionSchema>;
+
+/**
+ * Create an AgentDecision schema with typed finalResult field.
+ *
+ * When outputSchema is provided, the finalResult field will be typed
+ * to that schema, allowing Opper to enforce the correct structure.
+ * When finalResult is undefined/null, it passes through without validation.
+ *
+ * @param outputSchema - Optional Zod schema for the final result
+ * @returns AgentDecision schema (original or dynamically created variant)
+ */
+export function createAgentDecisionWithOutputSchema<T>(
+  outputSchema?: z.ZodType<T>,
+): z.ZodObject<z.ZodRawShape> {
+  if (!outputSchema) {
+    return AgentDecisionSchema;
+  }
+
+  // Use the actual outputSchema wrapped in optional() so that:
+  // 1. JSON Schema generation includes the proper structure for the LLM
+  // 2. Validation works correctly when finalResult is provided
+  // 3. undefined/null values are accepted when task isn't complete
+  const finalResultSchema = outputSchema.optional();
+
+  const dynamicSchema = z.object({
+    reasoning: z.string(),
+    toolCalls: z.array(ToolCallSchema).default([]),
+    memoryReads: z.array(z.string()).default([]),
+    memoryUpdates: z.record(MemoryUpdateSchema).default({}),
+    isComplete: z.boolean().default(false),
+    finalResult: finalResultSchema,
+  });
+
+  return dynamicSchema;
+}
 
 /**
  * Schema for tool execution result summary

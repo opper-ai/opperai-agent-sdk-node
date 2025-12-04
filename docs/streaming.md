@@ -27,12 +27,12 @@ When streaming is enabled the SDK switches to `opperClient.stream(...)`, buffers
 
 Streaming exposes dedicated hooks and matching event-emitter notifications. Hooks run every time, and listeners registered via `agent.on(...)` receive the same payloads synchronously.
 
-| Name | HookEvents constant | Payload highlights |
-| --- | --- | --- |
-| Start | `HookEvents.StreamStart` | `{ context, callType }` |
+| Name  | HookEvents constant      | Payload highlights                                            |
+| ----- | ------------------------ | ------------------------------------------------------------- |
+| Start | `HookEvents.StreamStart` | `{ context, callType }`                                       |
 | Chunk | `HookEvents.StreamChunk` | `{ context, callType, chunkData, accumulated, fieldBuffers }` |
-| End | `HookEvents.StreamEnd` | `{ context, callType, fieldBuffers }` |
-| Error | `HookEvents.StreamError` | `{ context, callType, error }` |
+| End   | `HookEvents.StreamEnd`   | `{ context, callType, fieldBuffers }`                         |
+| Error | `HookEvents.StreamError` | `{ context, callType, error }`                                |
 
 ```ts
 agent.registerHook(HookEvents.StreamChunk, ({ callType, accumulated }) => {

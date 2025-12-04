@@ -107,10 +107,7 @@ const normalizeIndexed = (value: unknown): unknown => {
   }
 
   const keys = Object.keys(normalizedEntries);
-  if (
-    keys.length > 0 &&
-    keys.every((key) => NUMERIC_TOKEN_PATTERN.test(key))
-  ) {
+  if (keys.length > 0 && keys.every((key) => NUMERIC_TOKEN_PATTERN.test(key))) {
     const parsedIndices = keys
       .map((key) => Number.parseInt(key, 10))
       .filter((index) => Number.isFinite(index) && index >= 0);
@@ -184,9 +181,10 @@ export class StreamAssembler {
     this.schema = options.schema;
   }
 
-  public feed(
-    chunk: { delta?: unknown; jsonPath?: string | null | undefined },
-  ): StreamFeedResult | null {
+  public feed(chunk: {
+    delta?: unknown;
+    jsonPath?: string | null | undefined;
+  }): StreamFeedResult | null {
     const { delta } = chunk;
     if (delta === null || delta === undefined) {
       return null;
@@ -255,7 +253,11 @@ export class StreamAssembler {
       if (path === STREAM_ROOT_PATH) {
         continue;
       }
-      const value = resolveFieldValue(path, this.displayBuffers, this.valueBuffers);
+      const value = resolveFieldValue(
+        path,
+        this.displayBuffers,
+        this.valueBuffers,
+      );
       setNestedValue(result, path, value);
     }
 

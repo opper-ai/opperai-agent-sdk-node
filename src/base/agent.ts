@@ -255,6 +255,28 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
    */
   protected readonly opperConfig: OpperClientConfig;
 
+  /**
+   * Creates a new BaseAgent instance
+   *
+   * @param config - Agent configuration object
+   * @param config.name - Unique name identifying this agent (required)
+   * @param config.description - Human-readable description of the agent's purpose
+   * @param config.instructions - System instructions guiding agent behavior
+   * @param config.tools - Array of tools or tool providers available to the agent
+   * @param config.maxIterations - Maximum iterations before terminating the agent loop (default: 25)
+   * @param config.model - Model identifier(s). Single model or array for fallback (default: "gcp/gemini-flash-latest")
+   * @param config.inputSchema - Zod schema for input validation
+   * @param config.outputSchema - Zod schema for output validation
+   * @param config.enableStreaming - Enable Opper streaming APIs for LLM calls (default: false)
+   * @param config.enableMemory - Enable memory subsystem (default: false)
+   * @param config.memory - Custom memory implementation (defaults to InMemoryStore if enableMemory is true)
+   * @param config.metadata - Additional metadata for the agent
+   * @param config.opperConfig - Opper API configuration containing apiKey and baseUrl
+   * @param config.onStreamStart - Handler invoked when a streaming call starts
+   * @param config.onStreamChunk - Handler invoked for each streaming chunk
+   * @param config.onStreamEnd - Handler invoked when a streaming call ends
+   * @param config.onStreamError - Handler invoked when streaming encounters an error
+   */
   constructor(config: BaseAgentConfig<TInput, TOutput>) {
     this.name = config.name;
     this.description = config.description;
