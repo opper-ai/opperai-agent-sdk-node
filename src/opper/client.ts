@@ -359,7 +359,12 @@ export class OpperClient {
   public async updateSpan(
     spanId: string,
     output: unknown,
-    options?: { error?: string },
+    options?: {
+      error?: string;
+      startTime?: Date;
+      endTime?: Date;
+      meta?: Record<string, unknown>;
+    },
   ): Promise<void> {
     return this.withRetry(async () => {
       // Serialize output to string if it's an object
@@ -373,6 +378,9 @@ export class OpperClient {
       await this.client.spans.update(spanId, {
         ...(serializedOutput !== undefined && { output: serializedOutput }),
         ...(options?.error && { error: options.error }),
+        ...(options?.startTime && { startTime: options.startTime }),
+        ...(options?.endTime && { endTime: options.endTime }),
+        ...(options?.meta && { meta: options.meta }),
       });
     }, `update-span:${spanId}`);
   }

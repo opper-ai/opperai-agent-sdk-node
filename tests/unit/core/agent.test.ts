@@ -227,10 +227,11 @@ describe("Agent", () => {
       }
       expect(capturedContext.executionHistory).toHaveLength(2);
 
+      // Tool spans should be siblings to think spans (both children of agent execution span)
       expect(mockOpperClient.createSpan).toHaveBeenCalledWith(
         expect.objectContaining({
           name: "tool_search",
-          parentSpanId: "span-1",
+          parentSpanId: "mock-span-id", // Agent execution span, not think span
         }),
       );
     });
