@@ -1,10 +1,10 @@
 import { Opper } from "opperai";
 import type { z } from "zod";
 import type { ZodTypeAny } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 import type { AgentLogger } from "../utils/logger";
 import { getDefaultLogger } from "../utils/logger";
+import { zodSchemaToJsonSchema } from "../utils/schema-utils";
 import { getUserAgent } from "../utils/version";
 type OpperCallResult = Awaited<ReturnType<Opper["call"]>>;
 
@@ -489,7 +489,7 @@ export class OpperClient {
 
     if (isZodSchema(schema)) {
       try {
-        return zodToJsonSchema(schema) as Record<string, unknown>;
+        return zodSchemaToJsonSchema(schema);
       } catch (error) {
         this.logger.warn("Failed to convert Zod schema to JSON Schema", {
           error: error instanceof Error ? error.message : String(error),

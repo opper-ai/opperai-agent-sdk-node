@@ -20,7 +20,7 @@ export const ThoughtSchema = z.object({
   confidence: z.number().min(0).max(1).optional(),
 
   /**
-   * Additional metadata
+   * Additional metadata (key-value pairs)
    */
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -99,7 +99,7 @@ export const AgentDecisionSchema = z.object({
   /**
    * Memory entries to write/update (key -> payload)
    */
-  memoryUpdates: z.record(MemoryUpdateSchema).default({}),
+  memoryUpdates: z.record(z.string(), MemoryUpdateSchema).default({}),
 
   /**
    * Whether the task is complete and finalResult is available
@@ -144,7 +144,7 @@ export function createAgentDecisionWithOutputSchema<T>(
     userMessage: z.string().default("Working on it..."),
     toolCalls: z.array(ToolCallSchema).default([]),
     memoryReads: z.array(z.string()).default([]),
-    memoryUpdates: z.record(MemoryUpdateSchema).default({}),
+    memoryUpdates: z.record(z.string(), MemoryUpdateSchema).default({}),
     isComplete: z.boolean().default(false),
     finalResult: finalResultSchema,
   });
