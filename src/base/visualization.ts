@@ -75,7 +75,8 @@ function getSchemaName(schema: ZodType<unknown> | undefined): string {
   try {
     const schemaAny = schema as {
       _def?: {
-        typeName?: string;
+        typeName?: string; // Zod 3
+        type?: string; // Zod 4
         description?: string;
         shape?: () => Record<string, ZodType<unknown>>;
       };
@@ -92,10 +93,16 @@ function getSchemaName(schema: ZodType<unknown> | undefined): string {
       return schemaAny._def.description;
     }
 
+    // Get type name (Zod 3 uses typeName, Zod 4 uses type)
+    const typeName = schemaAny._def?.typeName; // Zod 3: "ZodString", "ZodObject"
+    const type = schemaAny._def?.type; // Zod 4: "string", "object"
+
     // For object schemas, show field names
-    const typeName = schemaAny._def?.typeName;
-    if (typeName === "ZodObject" && schemaAny._def) {
-      const shape = schemaAny._def.shape?.();
+    const isObject = typeName === "ZodObject" || type === "object";
+    if (isObject && schemaAny._def) {
+      // Zod 3: shape is a function, Zod 4: shape is a getter
+      const shapeRaw = schemaAny._def.shape;
+      const shape = typeof shapeRaw === "function" ? shapeRaw() : shapeRaw;
       if (shape && typeof shape === "object") {
         const keys = Object.keys(shape);
         if (keys.length > 0) {
@@ -113,6 +120,11 @@ function getSchemaName(schema: ZodType<unknown> | undefined): string {
     // Fall back to cleaned type name
     if (typeName) {
       return typeName.replace("Zod", "").replace("Type", "");
+    }
+
+    // Zod 4: capitalize the type
+    if (type) {
+      return type.charAt(0).toUpperCase() + type.slice(1);
     }
 
     return "Any";
@@ -135,20 +147,28 @@ function extractParameters(
   try {
     const schemaAny = schema as {
       _def?: {
-        typeName?: string;
+        typeName?: string; // Zod 3
+        type?: string; // Zod 4
         shape?: () => Record<string, ZodType<unknown>>;
       };
     };
 
-    // For object schemas, extract field names and types
-    if (schemaAny._def?.typeName === "ZodObject") {
-      const shape = schemaAny._def.shape?.();
+    // For object schemas, extract field names and types (Zod 3 or Zod 4)
+    const isObject =
+      schemaAny._def?.typeName === "ZodObject" ||
+      schemaAny._def?.type === "object";
+    if (isObject) {
+      // Zod 3: shape is a function, Zod 4: shape is a getter
+      const shapeRaw = schemaAny._def?.shape;
+      const shape = typeof shapeRaw === "function" ? shapeRaw() : shapeRaw;
       if (shape && typeof shape === "object") {
         const params: string[] = [];
         for (const [key, value] of Object.entries(shape)) {
-          const fieldType = (value as { _def?: { typeName?: string } })?._def
-            ?.typeName;
+          // Zod 3: _def.typeName, Zod 4: def.type or type property
+          const valueAny = value as { _def?: { typeName?: string }; def?: { type?: string }; type?: string };
+          const fieldType = valueAny._def?.typeName || valueAny.def?.type || valueAny.type;
           if (fieldType) {
+            // Zod 3: "ZodString" -> "string", Zod 4: "string" -> "string"
             const cleanType = fieldType.replace("Zod", "").toLowerCase();
             params.push(`${key}: ${cleanType}`);
           } else {

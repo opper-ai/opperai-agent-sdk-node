@@ -98,7 +98,7 @@ ${Object.entries(input.data)
     description: "Format data into a readable report",
     schema: z.object({
       title: z.string().describe("Report title"),
-      data: z.record(z.unknown()).describe("Data to include in the report"),
+      data: z.record(z.string(), z.unknown()).describe("Data to include in the report"),
     }),
   },
 );

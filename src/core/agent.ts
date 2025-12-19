@@ -237,6 +237,10 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
               iteration: currentIteration,
             });
 
+            // Process memory writes even on immediate completion
+            // This ensures memory is persisted before returning
+            await this.handleMemoryActions(decision, context, thinkSpanId);
+
             // finalResult is already validated by the dynamic schema during parsing
             // Just need to ensure it's the correct type
             let finalResult: TOutput;
