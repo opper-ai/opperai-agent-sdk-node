@@ -1022,5 +1022,502 @@ describe("Agent", () => {
         expect(options?.meta?.["durationMs"]).toBeGreaterThanOrEqual(0);
       }
     });
+
+    it("should include timing data when tool execution throws error", async () => {
+      const failingTool: Tool<{ input: string }, { output: string }> = {
+        name: "throwing_tool",
+        description: "A tool that throws",
+        execute: async () => {
+          throw new Error("Tool execution exploded");
+        },
+      };
+
+      const firstDecision = createMockDecision({
+        reasoning: "Trying throwing tool",
+        toolCalls: [
+          { id: "call-1", toolName: "throwing_tool", arguments: { input: "test" } },
+        ],
+      });
+
+      const secondDecision = createMockDecision({
+        reasoning: "Tool failed, completing anyway",
+      });
+
+      const mockFinalResult = { status: "completed with errors" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: firstDecision,
+          spanId: "span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "span-2",
+          usage: mockUsage(120, 60),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          message: JSON.stringify(mockFinalResult),
+          spanId: "span-3",
+          usage: mockUsage(50, 25),
+        });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "ErrorTimingAgent",
+        tools: [failingTool],
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Find the call that updated the tool span with error and timing
+      const errorSpanUpdateCall = updateSpanSpy.mock.calls.find(
+        (call) =>
+          call[0] === "mock-span-id" &&
+          call[2]?.error !== undefined &&
+          call[2]?.startTime !== undefined &&
+          call[2]?.endTime !== undefined,
+      );
+
+      expect(errorSpanUpdateCall).toBeDefined();
+      if (errorSpanUpdateCall) {
+        const options = errorSpanUpdateCall[2];
+        expect(options?.error).toContain("Tool execution exploded");
+        expect(options?.startTime).toBeInstanceOf(Date);
+        expect(options?.endTime).toBeInstanceOf(Date);
+        expect(options?.meta?.["durationMs"]).toBeTypeOf("number");
+      }
+    });
+
+    it("should include timing data on agent execution span when error occurs", async () => {
+      // Always return a decision that requires more tools to force max iterations error
+      const neverCompleteDecision = createMockDecision({
+        reasoning: "Need more iterations",
+        toolCalls: [
+          { id: "call-1", toolName: "dummy_tool", arguments: {} },
+        ],
+      });
+
+      const dummyTool: Tool<unknown, unknown> = {
+        name: "dummy_tool",
+        execute: async () => ToolResultFactory.success("dummy_tool", {}),
+      };
+
+      vi.spyOn(mockOpperClient, "call").mockResolvedValue({
+        jsonPayload: neverCompleteDecision,
+        spanId: "span-1",
+        usage: mockUsage(100, 50),
+      });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "ErrorExecutionAgent",
+        maxIterations: 2,
+        tools: [dummyTool],
+        opperClient: mockOpperClient,
+      });
+
+      await expect(agent.process({ task: "never ending" })).rejects.toThrow(
+        /exceeded maximum iterations/,
+      );
+
+      // Find the call that updated the execution span with error and timing
+      const errorExecutionSpanCall = updateSpanSpy.mock.calls.find(
+        (call) =>
+          call[0] === "mock-span-id" &&
+          call[2]?.error !== undefined &&
+          call[2]?.startTime !== undefined &&
+          call[2]?.endTime !== undefined &&
+          call[2]?.meta?.["durationMs"] !== undefined,
+      );
+
+      expect(errorExecutionSpanCall).toBeDefined();
+      if (errorExecutionSpanCall) {
+        const options = errorExecutionSpanCall[2];
+        expect(options?.error).toContain("exceeded maximum iterations");
+        expect(options?.startTime).toBeInstanceOf(Date);
+        expect(options?.endTime).toBeInstanceOf(Date);
+        expect(options?.meta?.["durationMs"]).toBeTypeOf("number");
+      }
+    });
+  });
+
+  describe("Span type tagging", () => {
+    it("should create tool span with tool type", async () => {
+      const tool: Tool<{ query: string }, { results: string[] }> = {
+        name: "search",
+        description: "Search for info",
+        execute: async () =>
+          ToolResultFactory.success("search", { results: ["result1"] }),
+      };
+
+      const firstDecision = createMockDecision({
+        reasoning: "Need to search",
+        toolCalls: [
+          { id: "call-1", toolName: "search", arguments: { query: "test" } },
+        ],
+      });
+
+      const secondDecision = createMockDecision({
+        reasoning: "Done",
+      });
+
+      const mockFinalResult = { answer: "Found it" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: firstDecision,
+          spanId: "think-span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "think-span-2",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          spanId: "final-span",
+          usage: mockUsage(50, 25),
+        });
+
+      const createSpanSpy = vi.spyOn(mockOpperClient, "createSpan");
+
+      const agent = new Agent({
+        name: "ToolTypeAgent",
+        tools: [tool],
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Find the createSpan call for the tool
+      const toolSpanCall = createSpanSpy.mock.calls.find(
+        (call) => call[0]?.name === "tool_search",
+      );
+
+      expect(toolSpanCall).toBeDefined();
+      if (toolSpanCall) {
+        expect(toolSpanCall[0]?.type).toBe("🔧 tool");
+      }
+    });
+
+    it("should create agent-as-tool span with agent type", async () => {
+      // Create a tool with isAgent metadata
+      const agentTool: Tool<{ task: string }, { result: string }> = {
+        name: "sub_agent",
+        description: "A sub-agent tool",
+        metadata: { isAgent: true },
+        execute: async () =>
+          ToolResultFactory.success("sub_agent", { result: "done" }),
+      };
+
+      const firstDecision = createMockDecision({
+        reasoning: "Need to delegate to sub-agent",
+        toolCalls: [
+          { id: "call-1", toolName: "sub_agent", arguments: { task: "subtask" } },
+        ],
+      });
+
+      const secondDecision = createMockDecision({
+        reasoning: "Done",
+      });
+
+      const mockFinalResult = { answer: "Completed" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: firstDecision,
+          spanId: "think-span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "think-span-2",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          spanId: "final-span",
+          usage: mockUsage(50, 25),
+        });
+
+      const createSpanSpy = vi.spyOn(mockOpperClient, "createSpan");
+
+      const agent = new Agent({
+        name: "AgentTypeAgent",
+        tools: [agentTool],
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Find the createSpan call for the agent tool
+      const agentSpanCall = createSpanSpy.mock.calls.find(
+        (call) => call[0]?.name === "tool_sub_agent",
+      );
+
+      expect(agentSpanCall).toBeDefined();
+      if (agentSpanCall) {
+        expect(agentSpanCall[0]?.type).toBe("🤖 agent");
+      }
+    });
+
+    it("should create memory spans with memory type", async () => {
+      const memoryDecision = createMockDecision({
+        reasoning: "Store and read memory",
+        memoryReads: ["existing_key"],
+        memoryUpdates: {
+          new_key: { value: "new_value", description: "A new entry" },
+        },
+      });
+
+      const secondDecision = createMockDecision({
+        reasoning: "Done with memory operations",
+      });
+
+      const mockFinalResult = { status: "memory operations complete" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: memoryDecision,
+          spanId: "think-span",
+          usage: mockUsage(80, 40),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "think-span-2",
+          usage: mockUsage(80, 40),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          message: JSON.stringify(mockFinalResult),
+          spanId: "final-span",
+          usage: mockUsage(30, 15),
+        });
+
+      const createSpanSpy = vi.spyOn(mockOpperClient, "createSpan");
+
+      const agent = new Agent({
+        name: "MemoryTypeAgent",
+        enableMemory: true,
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process("Test memory types");
+
+      // Find memory_read span
+      const memoryReadSpanCall = createSpanSpy.mock.calls.find(
+        (call) => call[0]?.name === "memory_read",
+      );
+
+      expect(memoryReadSpanCall).toBeDefined();
+      if (memoryReadSpanCall) {
+        expect(memoryReadSpanCall[0]?.type).toBe("🧠 memory");
+      }
+
+      // Find memory_write span
+      const memoryWriteSpanCall = createSpanSpy.mock.calls.find(
+        (call) => call[0]?.name === "memory_write",
+      );
+
+      expect(memoryWriteSpanCall).toBeDefined();
+      if (memoryWriteSpanCall) {
+        expect(memoryWriteSpanCall[0]?.type).toBe("🧠 memory");
+      }
+    });
+  });
+
+  describe("Memory span timing", () => {
+    it("should include timing data for memory read operations", async () => {
+      const memoryDecision = createMockDecision({
+        reasoning: "Read from memory",
+        memoryReads: ["user_preference"],
+      });
+
+      const secondDecision = createMockDecision({
+        reasoning: "Done",
+      });
+
+      const mockFinalResult = { status: "done" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: memoryDecision,
+          spanId: "think-span",
+          usage: mockUsage(80, 40),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "think-span-2",
+          usage: mockUsage(80, 40),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          message: JSON.stringify(mockFinalResult),
+          spanId: "final-span",
+          usage: mockUsage(30, 15),
+        });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "MemoryReadTimingAgent",
+        enableMemory: true,
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process("Test memory read timing");
+
+      // Find the updateSpan call for memory_read with timing
+      const memoryReadUpdateCall = updateSpanSpy.mock.calls.find(
+        (call) =>
+          call[0] === "mock-span-id" &&
+          call[2]?.startTime !== undefined &&
+          call[2]?.endTime !== undefined &&
+          call[2]?.meta?.["durationMs"] !== undefined,
+      );
+
+      expect(memoryReadUpdateCall).toBeDefined();
+      if (memoryReadUpdateCall) {
+        const options = memoryReadUpdateCall[2];
+        expect(options?.startTime).toBeInstanceOf(Date);
+        expect(options?.endTime).toBeInstanceOf(Date);
+        expect(options?.meta?.["durationMs"]).toBeTypeOf("number");
+        expect(options?.meta?.["durationMs"]).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it("should include timing data for memory write operations", async () => {
+      const memoryDecision = createMockDecision({
+        reasoning: "Write to memory",
+        memoryUpdates: {
+          user_setting: { value: "dark_mode", description: "User theme preference" },
+        },
+      });
+
+      const mockFinalResult = { status: "saved" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: memoryDecision,
+          spanId: "think-span",
+          usage: mockUsage(80, 40),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          message: JSON.stringify(mockFinalResult),
+          spanId: "final-span",
+          usage: mockUsage(30, 15),
+        });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "MemoryWriteTimingAgent",
+        enableMemory: true,
+        opperClient: mockOpperClient,
+      });
+
+      await agent.process("Test memory write timing");
+
+      // Find the updateSpan call for memory_write with timing
+      const memoryWriteUpdateCall = updateSpanSpy.mock.calls.find(
+        (call) =>
+          call[0] === "mock-span-id" &&
+          call[2]?.startTime !== undefined &&
+          call[2]?.endTime !== undefined &&
+          call[2]?.meta?.["durationMs"] !== undefined,
+      );
+
+      expect(memoryWriteUpdateCall).toBeDefined();
+      if (memoryWriteUpdateCall) {
+        const options = memoryWriteUpdateCall[2];
+        expect(options?.startTime).toBeInstanceOf(Date);
+        expect(options?.endTime).toBeInstanceOf(Date);
+        expect(options?.meta?.["durationMs"]).toBeTypeOf("number");
+      }
+    });
+  });
+
+  describe("Streaming span naming", () => {
+    const createStreamResponse = (
+      events: Array<{ data: Record<string, unknown> }>,
+    ) => ({
+      headers: {},
+      result: {
+        async *[Symbol.asyncIterator]() {
+          for (const event of events) {
+            yield event;
+          }
+        },
+      },
+    });
+
+    it("should rename think span to 'think' in streaming mode", async () => {
+      const thinkEvents = [
+        { data: { spanId: "stream-think-span-123" } },
+        {
+          data: {
+            delta: "Task complete",
+            jsonPath: "reasoning",
+            chunkType: "json",
+          },
+        },
+      ];
+
+      const finalEvents = [
+        { data: { spanId: "stream-final-span" } },
+        {
+          data: {
+            delta: "Done",
+            chunkType: "text",
+          },
+        },
+      ];
+
+      vi.spyOn(mockOpperClient, "stream")
+        .mockResolvedValueOnce(createStreamResponse(thinkEvents))
+        .mockResolvedValueOnce(createStreamResponse(finalEvents));
+
+      const mockSpansGet = vi.fn(async (spanId: string) => ({
+        id: spanId,
+        traceId: `trace-${spanId}`,
+      }));
+      const mockTracesGet = vi.fn(async (traceId: string) => ({
+        spans: [
+          {
+            id: traceId.replace("trace-", ""),
+            data: { totalTokens: 50 },
+          },
+        ],
+      }));
+
+      (mockOpperClient.getClient as Mock).mockReturnValue({
+        spans: { get: mockSpansGet },
+        traces: { get: mockTracesGet },
+      });
+
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const agent = new Agent({
+        name: "StreamingRenameAgent",
+        opperClient: mockOpperClient,
+        enableStreaming: true,
+      });
+
+      await agent.process({ task: "test" });
+
+      // Check that updateSpan was called to rename the streaming think span
+      expect(updateSpanSpy).toHaveBeenCalledWith(
+        "stream-think-span-123",
+        undefined,
+        expect.objectContaining({ name: "think" }),
+      );
+    });
   });
 });
