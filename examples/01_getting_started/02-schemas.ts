@@ -85,7 +85,7 @@ async function main(): Promise<void> {
 
   try {
     // Output is validated against WeatherReportSchema
-    const report = await agent.process(request);
+    const { result: report, usage } = await agent.run(request);
 
     console.log("");
     console.log("=".repeat(60));
@@ -95,6 +95,8 @@ async function main(): Promise<void> {
     console.log(`Temperature: ${report.temperature}C`);
     console.log(`Conditions: ${report.conditions}`);
     console.log(`Date: ${report.date}`);
+    console.log("");
+    console.log("Usage:", usage);
   } catch (error) {
     console.error("Error:", error);
     if (error instanceof Error) {
