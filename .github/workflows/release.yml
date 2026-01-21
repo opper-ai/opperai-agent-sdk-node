@@ -263,10 +263,40 @@ jobs:
             exit 1
           fi
 
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          echo "📝 Extracting changelog for version $VERSION..."
+
+          # Extract section between ## [$VERSION] and next ## [
+          # Using awk for more reliable multiline extraction
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if ($0 ~ "\\[" ver "\\]") found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+
+          if [ -z "$NOTES" ]; then
+            echo "⚠️  No changelog entry found for version $VERSION"
+            NOTES="No changelog entry for this version."
+          else
+            echo "✅ Changelog extracted successfully"
+          fi
+
+          # Handle multiline for GitHub Actions
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         if: github.event.inputs.create_release != 'false' && github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGELOG_NOTES: ${{ steps.changelog.outputs.notes }}
         run: |
           VERSION="${{ needs.check-version.outputs.version }}"
           PREV_VERSION="${{ needs.check-version.outputs.prev_version }}"
@@ -279,80 +309,33 @@ jobs:
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
 
-          # Generate changelog if we have a previous version
-          CHANGELOG=""
-          if [ "$PREV_VERSION" != "manual" ] && [ "$PREV_VERSION" != "unknown" ]; then
-            PREV_TAG="v$PREV_VERSION"
-            if git tag | grep -q "^$PREV_TAG$"; then
-              echo "📝 Generating changelog from $PREV_TAG to $TAG_NAME..."
-              CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..$TAG_NAME" | head -20)
-            fi
-          fi
+          # Generate release notes using heredoc with variable expansion
+          cat > /tmp/release_notes.md << EOF
+          ## Opper Agent TypeScript SDK v${VERSION}
 
-          # Generate release notes
-          RELEASE_NOTES="$(cat <<EOF
-          ## 🚀 Opper Agent TypeScript SDK v$VERSION
+          ### Installation
 
-          This release contains the latest updates to the Opper Agent TypeScript SDK.
-
-          ### 📦 Installation
           \`\`\`bash
-          npm install $PACKAGE_NAME@$VERSION
+          npm install ${PACKAGE_NAME}@${VERSION}
           # or
-          yarn add $PACKAGE_NAME@$VERSION
-          # or
-          pnpm add $PACKAGE_NAME@$VERSION
+          pnpm add ${PACKAGE_NAME}@${VERSION}
           \`\`\`
 
-          ### 🔧 Features
-          - ✅ Full TypeScript support with strong typing
-          - ✅ Production-ready agent orchestration
-          - ✅ Opper platform integration
-          - ✅ Comprehensive tooling support
-          - ✅ Memory and context management
-          - ✅ MCP (Model Context Protocol) integration
-          - ✅ CommonJS and ESM module support
+          ### What's Changed
 
-          $(if [ -n "$CHANGELOG" ]; then echo "### 📋 Changes in this release"; echo "$CHANGELOG"; fi)
+          ${CHANGELOG_NOTES}
 
-          ### 🔗 Links
-          - [NPM Package](https://www.npmjs.com/package/$PACKAGE_NAME/v/$VERSION)
+          ### Links
+
+          - [NPM Package](https://www.npmjs.com/package/${PACKAGE_NAME}/v/${VERSION})
           - [Documentation](https://docs.opper.ai)
-          - [Examples](https://github.com/opper-ai/opperai-agent-sdk-node/tree/main/examples)
-
-          ### 📚 Getting Started
-
-          \`\`\`typescript
-          import { Agent } from "$PACKAGE_NAME";
-
-          const agent = new Agent({
-            name: "MyAgent",
-            instructions: "You are a helpful assistant",
-            tools: [],
-          });
-
-          const result = await agent.process("Hello!");
-          console.log(result);
-          \`\`\`
-
-          ### 🤖 SDK Information
-          This is the official TypeScript SDK for building agents with Opper AI.
-
-          - **Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - **Module Formats**: CommonJS + ESM
-          - **TypeScript**: Full type definitions included
-          - **Node.js**: >=20 required
-
-          ---
-
-          **Full Changelog**: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v$PREV_VERSION...v$VERSION
+          - [Full Changelog](https://github.com/opper-ai/opperai-agent-sdk-node/blob/main/CHANGELOG.md)
           EOF
-          )"
 
-          # Create the release
+          # Create the release using the notes file
           gh release create "$TAG_NAME" \
-            --title "🚀 Opper Agent TypeScript SDK v$VERSION" \
-            --notes "$RELEASE_NOTES" \
+            --title "Opper Agent TypeScript SDK v$VERSION" \
+            --notes-file /tmp/release_notes.md \
             --latest
 
           echo "✅ GitHub release created: https://github.com/opper-ai/opperai-agent-sdk-node/releases/tag/$TAG_NAME"
