@@ -3,6 +3,7 @@ import type { ZodType } from "zod";
 import type {
   Tool,
   ToolDefinition,
+  ToolExample,
   ToolExecutionContext,
   ToolResult,
 } from "../base/tool";
@@ -106,7 +107,7 @@ function getToolMetadata<TInput, TOutput>(
 /**
  * Options for creating a tool from a function
  */
-export interface ToolOptions<TInput> {
+export interface ToolOptions<TInput, TOutput = unknown> {
   /**
    * Tool name (defaults to function name)
    */
@@ -121,6 +122,16 @@ export interface ToolOptions<TInput> {
    * Input validation schema
    */
   schema?: ZodType<TInput>;
+
+  /**
+   * Output schema describing what the tool returns (exposed to LLM)
+   */
+  outputSchema?: ZodType<TOutput>;
+
+  /**
+   * Examples of tool usage to help the LLM understand expected behavior
+   */
+  examples?: Array<ToolExample<TInput, TOutput>>;
 
   /**
    * Execution timeout in milliseconds
@@ -221,7 +232,7 @@ function normalizePropertyKey(propertyKey: string | symbol): string {
 }
 
 function createToolDefinition<TInput, TOutput>(
-  options: ToolOptions<TInput>,
+  options: ToolOptions<TInput, TOutput>,
   methodName: string,
   propertyKey: string | symbol,
   method: ToolFunction<TInput, TOutput>,
@@ -237,6 +248,8 @@ function createToolDefinition<TInput, TOutput>(
     name,
     description,
     ...(options.schema && { schema: options.schema }),
+    ...(options.outputSchema && { outputSchema: options.outputSchema }),
+    ...(options.examples && { examples: options.examples }),
     ...(options.timeoutMs !== undefined && { timeoutMs: options.timeoutMs }),
     metadata: {
       ...options.metadata,
@@ -261,13 +274,17 @@ function createToolDefinition<TInput, TOutput>(
  *   {
  *     name: "add",
  *     description: "Add two numbers",
- *     schema: z.object({ a: z.number(), b: z.number() })
+ *     schema: z.object({ a: z.number(), b: z.number() }),
+ *     outputSchema: z.number(),
+ *     examples: [
+ *       { input: { a: 2, b: 3 }, output: 5, description: "Basic addition" },
+ *     ],
  *   }
  * );
  */
 export function createFunctionTool<TInput, TOutput>(
   fn: ToolFunction<TInput, TOutput>,
-  options: ToolOptions<TInput> = {},
+  options: ToolOptions<TInput, TOutput> = {},
 ): Tool<TInput, TOutput> {
   const name = options.name ?? (fn.name || "anonymous_tool");
 
@@ -279,6 +296,8 @@ export function createFunctionTool<TInput, TOutput>(
     name,
     description,
     ...(options.schema && { schema: options.schema }),
+    ...(options.outputSchema && { outputSchema: options.outputSchema }),
+    ...(options.examples && { examples: options.examples }),
     ...(options.timeoutMs !== undefined && { timeoutMs: options.timeoutMs }),
     metadata: {
       ...options.metadata,
@@ -347,9 +366,9 @@ export function createFunctionTool<TInput, TOutput>(
  * }
  */
 export function tool<TInput = unknown, TOutput = unknown>(
-  options?: ToolOptions<TInput>,
+  options?: ToolOptions<TInput, TOutput>,
 ): ToolMethodDecorator<TInput, TOutput> {
-  const decoratorOptions: ToolOptions<TInput> = options ?? {};
+  const decoratorOptions: ToolOptions<TInput, TOutput> = options ?? {};
 
   function decorator<TMethod extends ToolFunction<TInput, TOutput>>(
     value: TMethod,

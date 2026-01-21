@@ -698,12 +698,32 @@ The memory you write persists across all process() calls on this agent.`;
    */
   private async buildThinkContext(input: TInput, context: AgentContext) {
     // Build available tools list
-    const availableTools = Array.from(this.tools.values()).map((tool) => ({
-      name: tool.name,
-      description: tool.description || "",
-      // Convert Zod schema to JSON Schema for LLM consumption
-      parameters: tool.schema ? schemaToJson(tool.schema) : {},
-    }));
+    const availableTools = Array.from(this.tools.values()).map((tool) => {
+      // Determine output schema - could be Zod schema (needs conversion) or
+      // already JSON Schema (MCP tools store it in metadata)
+      let returns: Record<string, unknown> | undefined = undefined;
+      if (tool.outputSchema) {
+        // Zod schema - convert to JSON Schema
+        returns = schemaToJson(tool.outputSchema) as Record<string, unknown>;
+      } else if (
+        tool.metadata?.["outputSchema"] &&
+        typeof tool.metadata["outputSchema"] === "object"
+      ) {
+        // Already JSON Schema (e.g., from MCP tools)
+        returns = tool.metadata["outputSchema"] as Record<string, unknown>;
+      }
+
+      return {
+        name: tool.name,
+        description: tool.description || "",
+        // Convert Zod schema to JSON Schema for LLM consumption
+        parameters: tool.schema ? schemaToJson(tool.schema) : {},
+        // Include output schema if defined (helps LLM understand what tool returns)
+        ...(returns !== undefined ? { returns } : {}),
+        // Include examples if defined (helps LLM understand expected behavior)
+        ...(tool.examples ? { examples: tool.examples } : {}),
+      };
+    });
 
     // Build execution history
     const executionHistory = context.getLastNCycles(3).map((cycle) => {
