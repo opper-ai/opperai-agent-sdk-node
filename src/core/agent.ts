@@ -699,6 +699,20 @@ The memory you write persists across all process() calls on this agent.`;
   private async buildThinkContext(input: TInput, context: AgentContext) {
     // Build available tools list
     const availableTools = Array.from(this.tools.values()).map((tool) => {
+      // Determine parameters - could be Zod schema (needs conversion) or
+      // already JSON Schema (MCP tools store it in metadata)
+      let parameters: Record<string, unknown> = {};
+      if (tool.schema) {
+        // Zod schema - convert to JSON Schema
+        parameters = schemaToJson(tool.schema) as Record<string, unknown>;
+      } else if (
+        tool.metadata?.["parameters"] &&
+        typeof tool.metadata["parameters"] === "object"
+      ) {
+        // Already JSON Schema (e.g., from MCP tools)
+        parameters = tool.metadata["parameters"] as Record<string, unknown>;
+      }
+
       // Determine output schema - could be Zod schema (needs conversion) or
       // already JSON Schema (MCP tools store it in metadata)
       let returns: Record<string, unknown> | undefined = undefined;
@@ -716,8 +730,8 @@ The memory you write persists across all process() calls on this agent.`;
       return {
         name: tool.name,
         description: tool.description || "",
-        // Convert Zod schema to JSON Schema for LLM consumption
-        parameters: tool.schema ? schemaToJson(tool.schema) : {},
+        // Include parameters (from Zod schema or MCP metadata)
+        parameters,
         // Include output schema if defined (helps LLM understand what tool returns)
         ...(returns !== undefined ? { returns } : {}),
         // Include examples if defined (helps LLM understand expected behavior)
