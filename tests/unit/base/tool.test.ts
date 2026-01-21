@@ -32,6 +32,33 @@ describe("Tool helpers", () => {
     expect(failure.metadata).toEqual({});
   });
 
+  it("constructs tool results with usage for agent-as-tool", () => {
+    const usage = {
+      requests: 2,
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+      cost: { generation: 0.01, platform: 0.001, total: 0.011 },
+    };
+
+    const success = ToolResultFactory.success("nested_agent", { answer: "42" }, { usage });
+    const failure = ToolResultFactory.failure("nested_agent", new Error("Agent failed"), { usage });
+
+    expect(success.success).toBe(true);
+    expect(success.usage).toEqual(usage);
+
+    expect(failure.success).toBe(false);
+    expect(failure.usage).toEqual(usage);
+  });
+
+  it("does not include usage when not provided", () => {
+    const success = ToolResultFactory.success("regular_tool", { data: "test" });
+    const failure = ToolResultFactory.failure("regular_tool", "error");
+
+    expect(success.usage).toBeUndefined();
+    expect(failure.usage).toBeUndefined();
+  });
+
   it("validates tool results against schemas", () => {
     const success = ToolResultFactory.success("search", { value: 1 });
     const failure = ToolResultFactory.failure("search", new Error("nope"), {

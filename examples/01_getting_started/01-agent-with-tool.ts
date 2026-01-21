@@ -134,12 +134,18 @@ async function main(): Promise<void> {
   console.log(`📝 Task: ${task}\n`);
 
   try {
-    const result = await agent.process(task);
+    // Use run() to get both result and usage statistics
+    const { result, usage } = await agent.run(task);
 
     console.log("\n" + "=".repeat(60));
     console.log("Final Result:");
     console.log("=".repeat(60));
     console.log(result);
+
+    console.log("\n" + "=".repeat(60));
+    console.log("Usage Statistics (from run()):");
+    console.log("=".repeat(60));
+    console.log(usage);
   } catch (error) {
     console.error("\n Error:", error);
     if (error instanceof Error) {
