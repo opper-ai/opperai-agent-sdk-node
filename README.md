@@ -48,9 +48,12 @@ const agent = new Agent<string, OutputType>({
   outputSchema: Output,
 });
 
-const result = await agent.process("Say hi to Ada");
-// => { message: "Hi Ada!" }
+const { result, usage } = await agent.run("Say hi to Ada");
+// result => { message: "Hi Ada!" }
+// usage => { requests, inputTokens, outputTokens, totalTokens }
 ```
+
+> **Note:** `agent.process(input)` also works if you only need the result without usage stats.
 
 ## Tools
 
@@ -72,7 +75,7 @@ const agent = new Agent<string, { answer: number }>({
   outputSchema: z.object({ answer: z.number() }),
 });
 
-const res = await agent.process("What is (5 + 3)? Return JSON with answer.");
+const { result } = await agent.run("What is (5 + 3)? Return JSON with answer.");
 ```
 
 Decorator tools and extraction:
@@ -111,9 +114,10 @@ const Coordinator = new Agent<string, string>({
   tools: [Summarize.asTool("summarize")],
 });
 
-const answer = await Coordinator.process(
+const { result, usage } = await Coordinator.run(
   "Summarize: Opper helps you build agents.",
 );
+// usage includes aggregated stats from nested Summarize agent
 ```
 
 ## MCP Integration
@@ -131,7 +135,7 @@ const agent = new Agent<string, string>({
   tools: [mcp(fsServer)],
 });
 
-const out = await agent.process("Read README.md and summarize it.");
+const { result } = await agent.run("Read README.md and summarize it.");
 ```
 
 ## Hooks & Context

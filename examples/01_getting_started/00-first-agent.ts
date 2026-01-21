@@ -15,6 +15,7 @@ const agent = new Agent<string, OutputType>({
   verbose: true, // Enable verbose logging
 });
 
-const result = await agent.process("Say hi to Ada");
+const { result, usage } = await agent.run("Say hi to Ada");
 console.log(result);
 // => { message: "Hi Ada!" }
+console.log("Usage:", usage);
