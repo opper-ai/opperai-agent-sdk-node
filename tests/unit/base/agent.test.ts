@@ -594,4 +594,31 @@ describe("BaseAgent", () => {
       );
     });
   });
+
+  describe("run()", () => {
+    it("returns result and usage object", async () => {
+      const agent = new TestAgent({ name: "usage-test" });
+
+      const response = await agent.run("test input");
+
+      expect(response).toHaveProperty("result");
+      expect(response).toHaveProperty("usage");
+      expect(response.result).toBe("Processed: test input");
+    });
+
+    it("returns usage with expected structure", async () => {
+      const agent = new TestAgent({ name: "usage-structure" });
+
+      const { usage } = await agent.run("test");
+
+      expect(usage).toHaveProperty("requests");
+      expect(usage).toHaveProperty("inputTokens");
+      expect(usage).toHaveProperty("outputTokens");
+      expect(usage).toHaveProperty("totalTokens");
+      expect(usage).toHaveProperty("cost");
+      expect(usage.cost).toHaveProperty("generation");
+      expect(usage.cost).toHaveProperty("platform");
+      expect(usage.cost).toHaveProperty("total");
+    });
+  });
 });
