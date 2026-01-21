@@ -85,10 +85,26 @@ export interface ToolFailure {
 
 export type ToolResult<TOutput = unknown> = ToolSuccess<TOutput> | ToolFailure;
 
+/**
+ * Example of a tool execution with input and expected output
+ */
+export interface ToolExample<TInput, TOutput> {
+  /** Example input to the tool */
+  input: TInput;
+  /** Expected output from the tool */
+  output: TOutput;
+  /** Optional description of what this example demonstrates */
+  description?: string;
+}
+
 export interface ToolDefinition<TInput, TOutput> {
   name: string;
   description?: string;
   schema?: ZodType<TInput>;
+  /** Optional schema describing the tool's output structure */
+  outputSchema?: ZodType<TOutput>;
+  /** Optional examples of tool usage to help the LLM understand expected behavior */
+  examples?: Array<ToolExample<TInput, TOutput>>;
   execute: (
     input: TInput,
     context: ToolExecutionContext,

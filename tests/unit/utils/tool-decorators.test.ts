@@ -294,6 +294,105 @@ describe("createFunctionTool", () => {
       expect(tool.metadata?.["functionName"]).toBe("namedFunction");
     });
   });
+
+  describe("Output schema and examples", () => {
+    it("includes outputSchema in tool definition", () => {
+      const inputSchema = z.object({
+        a: z.number(),
+        b: z.number(),
+      });
+      const outputSchema = z.number();
+
+      type Input = z.infer<typeof inputSchema>;
+      type Output = z.infer<typeof outputSchema>;
+
+      const addTool = createFunctionTool(
+        (input: Input): Output => input.a + input.b,
+        {
+          name: "add",
+          description: "Add two numbers",
+          schema: inputSchema,
+          outputSchema: outputSchema,
+        },
+      );
+
+      expect(addTool.outputSchema).toBeDefined();
+      expect(addTool.outputSchema).toBe(outputSchema);
+    });
+
+    it("includes examples in tool definition", () => {
+      const inputSchema = z.object({
+        a: z.number(),
+        b: z.number(),
+      });
+      const outputSchema = z.number();
+
+      type Input = z.infer<typeof inputSchema>;
+      type Output = z.infer<typeof outputSchema>;
+
+      const examples = [
+        { input: { a: 2, b: 3 }, output: 5, description: "Basic addition" },
+        { input: { a: -1, b: 1 }, output: 0, description: "Adding opposites" },
+      ];
+
+      const addTool = createFunctionTool(
+        (input: Input): Output => input.a + input.b,
+        {
+          name: "add",
+          schema: inputSchema,
+          outputSchema: outputSchema,
+          examples: examples,
+        },
+      );
+
+      expect(addTool.examples).toBeDefined();
+      expect(addTool.examples).toHaveLength(2);
+      expect(addTool.examples?.[0]).toEqual({
+        input: { a: 2, b: 3 },
+        output: 5,
+        description: "Basic addition",
+      });
+    });
+
+    it("works with structured output schema", () => {
+      const inputSchema = z.object({
+        numerator: z.number(),
+        denominator: z.number(),
+      });
+      const outputSchema = z.object({
+        quotient: z.number(),
+        remainder: z.number(),
+      });
+
+      type Input = z.infer<typeof inputSchema>;
+      type Output = z.infer<typeof outputSchema>;
+
+      const divideTool = createFunctionTool(
+        (input: Input): Output => ({
+          quotient: Math.floor(input.numerator / input.denominator),
+          remainder: input.numerator % input.denominator,
+        }),
+        {
+          name: "divide",
+          schema: inputSchema,
+          outputSchema: outputSchema,
+          examples: [
+            {
+              input: { numerator: 10, denominator: 3 },
+              output: { quotient: 3, remainder: 1 },
+              description: "Division with remainder",
+            },
+          ],
+        },
+      );
+
+      expect(divideTool.outputSchema).toBe(outputSchema);
+      expect(divideTool.examples?.[0]?.output).toEqual({
+        quotient: 3,
+        remainder: 1,
+      });
+    });
+  });
 });
 
 describe("@tool decorator", () => {
