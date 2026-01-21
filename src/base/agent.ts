@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 
-import type { AgentContext } from "./context";
+import type { AgentContext, Usage } from "./context";
 import {
   AgentEventEmitter,
   type AgentEventListener,
@@ -356,11 +356,45 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
    * Main entry point for agent execution.
    * Orchestrates lifecycle: context initialization, hook triggering, loop execution, teardown.
    *
+   * **Note:** This method will be removed in a future update.
+   * Consider using {@link run} instead, which returns both result and usage statistics.
+   *
    * @param input - Input to process
    * @param parentSpanId - Optional parent span ID for tracing
    * @returns Processed output
    */
   public async process(input: TInput, parentSpanId?: string): Promise<TOutput> {
+    const { result } = await this.executeProcess(input, parentSpanId);
+    return result;
+  }
+
+  /**
+   * Process input and return both result and usage statistics.
+   * This is the recommended method for agent execution.
+   *
+   * @param input - Input to process
+   * @param parentSpanId - Optional parent span ID for tracing
+   * @returns Object containing the result and usage statistics
+   */
+  public async run(
+    input: TInput,
+    parentSpanId?: string,
+  ): Promise<{ result: TOutput; usage: Usage }> {
+    return this.executeProcess(input, parentSpanId);
+  }
+
+  /**
+   * Internal method that executes the process and returns both result and usage.
+   * This is the core implementation shared by process() and run().
+   *
+   * @param input - Input to process
+   * @param parentSpanId - Optional parent span ID for tracing
+   * @returns Object containing the result and usage statistics
+   */
+  protected async executeProcess(
+    input: TInput,
+    parentSpanId?: string,
+  ): Promise<{ result: TOutput; usage: Usage }> {
     // Validate input if schema provided
     const validatedInput = this.inputSchema
       ? this.inputSchema.parse(input)
@@ -389,7 +423,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
         result: validatedOutput,
       });
 
-      return validatedOutput;
+      return { result: validatedOutput, usage: context.usage };
     } catch (error) {
       // Trigger agent:end hook (error)
       await this.triggerHook(HookEvents.AgentEnd, {
