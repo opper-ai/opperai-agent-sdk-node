@@ -429,8 +429,8 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         ...(context.parentSpanId && { parentSpanId: context.parentSpanId }),
       });
 
-      // Update usage
-      context.updateUsage({
+      // Update usage with source tracking (will be cleaned up if no nested agents)
+      context.updateUsageWithSource(this.name, {
         requests: 1,
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
@@ -579,7 +579,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         streamSpanId,
       );
       if (!usageTracked) {
-        context.updateUsage({
+        context.updateUsageWithSource(this.name, {
           requests: 1,
           inputTokens: 0,
           outputTokens: 0,
@@ -856,6 +856,12 @@ The memory you write persists across all process() calls on this agent.`;
           context,
           { spanId: toolSpan.id },
         );
+
+        // Aggregate usage from nested agent tools
+        // This propagates usage statistics from agent-as-tool executions
+        if (result.usage) {
+          context.updateUsageWithSource(toolCall.toolName, result.usage);
+        }
 
         // Record end time and calculate duration
         const endTime = new Date();
@@ -1216,8 +1222,8 @@ Follow any instructions provided for formatting and style.`;
         TOutput
       >(callOptions);
 
-      // Update usage
-      context.updateUsage({
+      // Update usage with source tracking (will be cleaned up if no nested agents)
+      context.updateUsageWithSource(this.name, {
         requests: 1,
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
@@ -1364,7 +1370,7 @@ Follow any instructions provided for formatting and style.`;
         streamSpanId,
       );
       if (!usageTracked) {
-        context.updateUsage({
+        context.updateUsageWithSource(this.name, {
           requests: 1,
           inputTokens: 0,
           outputTokens: 0,
@@ -1454,7 +1460,7 @@ Follow any instructions provided for formatting and style.`;
               : undefined;
 
         if (totalTokensRaw !== undefined) {
-          context.updateUsage({
+          context.updateUsageWithSource(this.name, {
             requests: 1,
             inputTokens: 0,
             outputTokens: 0,

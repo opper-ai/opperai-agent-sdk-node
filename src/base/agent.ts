@@ -423,6 +423,9 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
         result: validatedOutput,
       });
 
+      // Clean up breakdown if only parent agent (no nested agents)
+      context.cleanupBreakdownIfOnlyParent(this.name);
+
       return { result: validatedOutput, usage: context.usage };
     } catch (error) {
       // Trigger agent:end hook (error)
@@ -547,6 +550,8 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
 
   /**
    * Convert this agent into a tool that can be used by other agents.
+   * When used as a tool, the nested agent's usage statistics are propagated
+   * back to the parent agent for aggregation.
    *
    * @param toolName - Optional custom name for the tool (defaults to agent name)
    * @param toolDescription - Optional custom description (defaults to agent description)
@@ -575,8 +580,10 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
             executionContext.spanId ??
             executionContext.agentContext.parentSpanId ??
             undefined;
-          const result = await this.process(input, parentSpanId);
-          return ToolResultFactory.success(tool.name, result);
+          // Use run() to get both result and usage statistics
+          const { result, usage } = await this.run(input, parentSpanId);
+          // Include usage in the tool result for parent agent aggregation
+          return ToolResultFactory.success(tool.name, result, { usage });
         } catch (error) {
           return ToolResultFactory.failure(
             tool.name,

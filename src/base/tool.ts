@@ -3,7 +3,7 @@ import type { ZodType, ZodTypeAny } from "zod";
 import { z } from "zod";
 
 import type { BaseAgent } from "./agent";
-import type { AgentContext } from "./context";
+import type { AgentContext, Usage } from "./context";
 import { err, ok, type Result } from "./result";
 
 export const ToolMetadataSchema = z.record(z.string(), z.unknown());
@@ -70,6 +70,8 @@ export interface ToolSuccess<TOutput> {
   toolName: string;
   output: TOutput;
   metadata: Record<string, unknown>;
+  /** Optional usage statistics - only present for agent-as-tool, omitted for regular tools */
+  usage?: Usage;
   startedAt?: number;
   finishedAt?: number;
 }
@@ -79,6 +81,8 @@ export interface ToolFailure {
   toolName: string;
   error: Error | string;
   metadata: Record<string, unknown>;
+  /** Optional usage statistics - included even on failure since partial work may have been done */
+  usage?: Usage;
   startedAt?: number;
   finishedAt?: number;
 }
@@ -126,6 +130,8 @@ export interface ToolProvider {
 
 export interface ToolResultInit {
   metadata?: Record<string, unknown>;
+  /** Optional usage statistics - only for agent-as-tool */
+  usage?: Usage;
   startedAt?: number;
   finishedAt?: number;
 }
@@ -143,6 +149,7 @@ export const ToolResultFactory = {
       ...(init.startedAt !== undefined && { startedAt: init.startedAt }),
       finishedAt: init.finishedAt ?? Date.now(),
       metadata: init.metadata ?? {},
+      ...(init.usage !== undefined && { usage: init.usage }),
     };
 
     // Validate with schema
@@ -163,6 +170,7 @@ export const ToolResultFactory = {
       ...(init.startedAt !== undefined && { startedAt: init.startedAt }),
       finishedAt: init.finishedAt ?? Date.now(),
       metadata: init.metadata ?? {},
+      ...(init.usage !== undefined && { usage: init.usage }),
     };
 
     // Validate with schema

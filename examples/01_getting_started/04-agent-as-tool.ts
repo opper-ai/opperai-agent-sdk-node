@@ -16,6 +16,8 @@ import {
   createFunctionTool,
   ToolResultFactory,
   type ToolExecutionContext,
+  type Usage,
+  type BaseUsage,
 } from "@opperai/agents";
 
 // Check for API key upfront
@@ -191,6 +193,33 @@ Delegate appropriately and synthesize the results.`,
 });
 
 // ============================================================================
+// HELPER: Print usage statistics with breakdown
+// ============================================================================
+
+function printUsage(usage: Usage, indent = ""): void {
+  console.log(`${indent}Requests: ${usage.requests}`);
+  console.log(`${indent}Input Tokens: ${usage.inputTokens}`);
+  console.log(`${indent}Output Tokens: ${usage.outputTokens}`);
+  console.log(`${indent}Total Tokens: ${usage.totalTokens}`);
+  console.log(`${indent}Cost:`);
+  console.log(`${indent}  Generation: $${usage.cost.generation.toFixed(6)}`);
+  console.log(`${indent}  Platform: $${usage.cost.platform.toFixed(6)}`);
+  console.log(`${indent}  Total: $${usage.cost.total.toFixed(6)}`);
+
+  // Show breakdown if present (for nested agent usage)
+  if (usage.breakdown && Object.keys(usage.breakdown).length > 0) {
+    console.log(`${indent}Breakdown by Agent:`);
+    for (const [source, sourceUsage] of Object.entries(usage.breakdown)) {
+      // BaseUsage type is used for breakdown entries
+      const su = sourceUsage as BaseUsage;
+      console.log(`${indent}  ${source}:`);
+      console.log(`${indent}    Tokens: ${su.totalTokens}`);
+      console.log(`${indent}    Cost: $${su.cost.total.toFixed(6)}`);
+    }
+  }
+}
+
+// ============================================================================
 // MAIN EXECUTION
 // ============================================================================
 
@@ -205,11 +234,17 @@ async function main(): Promise<void> {
   console.log(`📝 Task: ${task1}\n`);
 
   try {
-    const result1 = await coordinatorV1.process(task1);
+    // Use run() to get both result and usage statistics
+    const { result: result1, usage: usage1 } = await coordinatorV1.run(task1);
     console.log("\n" + "=".repeat(70));
     console.log("Final Result (Approach 1):");
     console.log("=".repeat(70));
     console.log(result1);
+
+    console.log("\n" + "=".repeat(70));
+    console.log("Usage Statistics (Approach 1 - with nested agent breakdown):");
+    console.log("=".repeat(70));
+    printUsage(usage1, "  ");
   } catch (error) {
     console.error("\n❌ Error in Approach 1:", error);
   }
@@ -224,11 +259,17 @@ async function main(): Promise<void> {
   console.log(`📝 Task: ${task2}\n`);
 
   try {
-    const result2 = await coordinatorV2.process(task2);
+    // Use run() to get both result and usage statistics
+    const { result: result2, usage: usage2 } = await coordinatorV2.run(task2);
     console.log("\n" + "=".repeat(70));
     console.log("Final Result (Approach 2):");
     console.log("=".repeat(70));
     console.log(result2);
+
+    console.log("\n" + "=".repeat(70));
+    console.log("Usage Statistics (Approach 2 - manual wrappers, no breakdown):");
+    console.log("=".repeat(70));
+    printUsage(usage2, "  ");
   } catch (error) {
     console.error("\n❌ Error in Approach 2:", error);
   }
@@ -242,12 +283,14 @@ async function main(): Promise<void> {
   - You want simple, quick agent composition
   - The agent's existing interface is sufficient
   - You're prototyping or building simple workflows
+  - You want automatic usage aggregation with breakdown
 
 📌 Use Manual Wrappers when:
   - You need custom parameters or validation
   - You want to modify inputs/outputs before delegation
   - You need error handling specific to your use case
   - You're building production systems with specific contracts
+  - Note: Manual wrappers don't automatically aggregate nested usage
   `);
 }
 
