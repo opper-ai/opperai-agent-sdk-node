@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Expose MCP tool parameters in think context
+- `agent.on()` now works for all hook events (previously only streaming events fired)
+  - `agent.on()` and `registerHook()` are now equivalent - both use the unified hook system
+  - All 17 hook events (AgentStart, AgentEnd, LoopStart, etc.) fire for both methods
 
 ## [0.3.0] - 2025-01-21
 

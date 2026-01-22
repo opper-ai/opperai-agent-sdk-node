@@ -499,10 +499,6 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       context,
       callType: "think",
     });
-    this.emitAgentEvent(HookEvents.StreamStart, {
-      context,
-      callType: "think",
-    });
 
     try {
       const streamResponse = await this.opperClient.stream<
@@ -549,7 +545,6 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         };
 
         await this.triggerHook(HookEvents.StreamChunk, chunkPayload);
-        this.emitAgentEvent(HookEvents.StreamChunk, chunkPayload);
       }
 
       const fieldBuffers = assembler.snapshot();
@@ -559,7 +554,6 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         fieldBuffers,
       };
       await this.triggerHook(HookEvents.StreamEnd, endPayload);
-      this.emitAgentEvent(HookEvents.StreamEnd, endPayload);
 
       const finalize = assembler.finalize();
 
@@ -626,11 +620,6 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       return resultPayload;
     } catch (error) {
       await this.triggerHook(HookEvents.StreamError, {
-        context,
-        callType: "think",
-        error,
-      });
-      this.emitAgentEvent(HookEvents.StreamError, {
         context,
         callType: "think",
         error,
@@ -1276,10 +1265,6 @@ Follow any instructions provided for formatting and style.`;
       context,
       callType: "final_result",
     });
-    this.emitAgentEvent(HookEvents.StreamStart, {
-      context,
-      callType: "final_result",
-    });
 
     try {
       // Generate dynamic function name for better traceability
@@ -1330,7 +1315,6 @@ Follow any instructions provided for formatting and style.`;
         };
 
         await this.triggerHook(HookEvents.StreamChunk, chunkPayload);
-        this.emitAgentEvent(HookEvents.StreamChunk, chunkPayload);
       }
 
       const fieldBuffers = assembler.snapshot();
@@ -1340,7 +1324,6 @@ Follow any instructions provided for formatting and style.`;
         fieldBuffers,
       };
       await this.triggerHook(HookEvents.StreamEnd, endPayload);
-      this.emitAgentEvent(HookEvents.StreamEnd, endPayload);
 
       const finalize = assembler.finalize();
 
@@ -1395,11 +1378,6 @@ Follow any instructions provided for formatting and style.`;
       return result;
     } catch (error) {
       await this.triggerHook(HookEvents.StreamError, {
-        context,
-        callType: "final_result",
-        error,
-      });
-      this.emitAgentEvent(HookEvents.StreamError, {
         context,
         callType: "final_result",
         error,

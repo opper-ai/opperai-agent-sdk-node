@@ -2,12 +2,6 @@ import type { ZodType } from "zod";
 
 import type { AgentContext, Usage } from "./context";
 import {
-  AgentEventEmitter,
-  type AgentEventListener,
-  type AgentEventName,
-  type AgentEventPayload,
-} from "./events";
-import {
   HookEvents,
   HookManager,
   type HookEventName,
@@ -95,22 +89,22 @@ export interface BaseAgentConfig<TInput, TOutput> {
   /**
    * Register a handler invoked when a streaming call starts.
    */
-  onStreamStart?: AgentEventListener<typeof HookEvents.StreamStart>;
+  onStreamStart?: HookHandler<typeof HookEvents.StreamStart>;
 
   /**
    * Register a handler invoked for each streaming chunk.
    */
-  onStreamChunk?: AgentEventListener<typeof HookEvents.StreamChunk>;
+  onStreamChunk?: HookHandler<typeof HookEvents.StreamChunk>;
 
   /**
    * Register a handler invoked when a streaming call ends.
    */
-  onStreamEnd?: AgentEventListener<typeof HookEvents.StreamEnd>;
+  onStreamEnd?: HookHandler<typeof HookEvents.StreamEnd>;
 
   /**
    * Register a handler invoked when streaming encounters an error.
    */
-  onStreamError?: AgentEventListener<typeof HookEvents.StreamError>;
+  onStreamError?: HookHandler<typeof HookEvents.StreamError>;
 
   /**
    * Enable memory subsystem
@@ -223,11 +217,6 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
   protected readonly hooks: HookManager;
 
   /**
-   * Event dispatcher for runtime events (notably streaming)
-   */
-  protected readonly events: AgentEventEmitter;
-
-  /**
    * Registry of available tools
    */
   protected readonly tools: Map<string, Tool<unknown, unknown>>;
@@ -290,7 +279,6 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     this.metadata = { ...(config.metadata ?? {}) };
 
     this.hooks = new HookManager();
-    this.events = new AgentEventEmitter();
     this.tools = new Map();
     this.baseTools = new Map();
     this.toolProviders = new Set();
@@ -612,43 +600,45 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
 
   /**
    * Register an event listener.
+   * This is equivalent to registerHook() - both methods use the unified hook system.
    *
-   * @param event - Event name
+   * @param event - Event name (any HookEvents value)
    * @param listener - Listener callback
    * @returns Cleanup function to unregister the listener
    */
-  public on<E extends AgentEventName>(
+  public on<E extends HookEventName>(
     event: E,
-    listener: AgentEventListener<E>,
+    listener: HookHandler<E>,
   ): () => void {
-    return this.events.on(event, listener);
+    return this.hooks.on(event, listener);
   }
 
   /**
    * Register a one-time event listener that removes itself after the first call.
+   * This is equivalent to calling registerHook() with a self-removing handler.
    *
-   * @param event - Event name
+   * @param event - Event name (any HookEvents value)
    * @param listener - Listener callback
    * @returns Cleanup function (no-op once listener fires)
    */
-  public once<E extends AgentEventName>(
+  public once<E extends HookEventName>(
     event: E,
-    listener: AgentEventListener<E>,
+    listener: HookHandler<E>,
   ): () => void {
-    return this.events.once(event, listener);
+    return this.hooks.once(event, listener);
   }
 
   /**
    * Remove a previously registered event listener.
    *
-   * @param event - Event name
+   * @param event - Event name (any HookEvents value)
    * @param listener - Listener callback to remove
    */
-  public off<E extends AgentEventName>(
+  public off<E extends HookEventName>(
     event: E,
-    listener: AgentEventListener<E>,
+    listener: HookHandler<E>,
   ): void {
-    this.events.off(event, listener);
+    this.hooks.off(event, listener);
   }
 
   /**
@@ -668,19 +658,6 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
       // Log but don't throw - hook failures shouldn't break agent execution
       console.warn(`Hook error for event ${event}:`, error);
     }
-  }
-
-  /**
-   * Emit a runtime event to listeners.
-   *
-   * @param event - Event name
-   * @param payload - Event payload
-   */
-  protected emitAgentEvent<E extends AgentEventName>(
-    event: E,
-    payload: AgentEventPayload<E>,
-  ): void {
-    this.events.emit(event, payload);
   }
 
   /**
