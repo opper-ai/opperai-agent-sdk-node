@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { AgentContext } from "@/base/context";
 import type { ToolExecutionContext } from "@/base/tool";
+import { ToolResultFactory } from "@/base/tool";
 import {
   createFunctionTool,
   extractTools,
@@ -391,6 +392,84 @@ describe("createFunctionTool", () => {
         quotient: 3,
         remainder: 1,
       });
+    });
+  });
+
+  describe("ToolResult unwrapping", () => {
+    it("uses ToolResult directly when function returns ToolResultFactory.success()", async () => {
+      // Function that returns a ToolResult instead of raw output
+      const toolFn = () => ToolResultFactory.success("myTool", { data: "test" });
+
+      const wrappedTool = createFunctionTool(toolFn, {
+        name: "wrapped",
+        description: "Returns ToolResult directly",
+      });
+
+      const context = new AgentContext({ agentName: "test", goal: "test" });
+      const executionContext: ToolExecutionContext = {
+        agentContext: context,
+        metadata: {},
+      };
+
+      const result = await wrappedTool.execute({}, executionContext);
+
+      // Should NOT be double-wrapped
+      expect(result.success).toBe(true);
+      if (result.success) {
+        // Output should be the actual data, not another ToolResult
+        expect(result.output).toEqual({ data: "test" });
+        // Verify it's not a nested ToolResult (which would have 'success' property)
+        expect("success" in (result.output as object)).toBe(false);
+      }
+    });
+
+    it("uses ToolResult directly when function returns ToolResultFactory.failure()", async () => {
+      // Function that returns a failure ToolResult
+      const toolFn = () =>
+        ToolResultFactory.failure("myTool", new Error("Test error"));
+
+      const wrappedTool = createFunctionTool(toolFn, {
+        name: "wrapped",
+        description: "Returns failure ToolResult directly",
+      });
+
+      const context = new AgentContext({ agentName: "test", goal: "test" });
+      const executionContext: ToolExecutionContext = {
+        agentContext: context,
+        metadata: {},
+      };
+
+      const result = await wrappedTool.execute({}, executionContext);
+
+      // Should be the failure result directly, NOT wrapped in success
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(Error);
+        expect((result.error as Error).message).toBe("Test error");
+      }
+    });
+
+    it("wraps raw output normally when not a ToolResult", async () => {
+      // Function that returns raw data (normal case)
+      const toolFn = () => ({ data: "test" });
+
+      const wrappedTool = createFunctionTool(toolFn, {
+        name: "wrapped",
+        description: "Returns raw output",
+      });
+
+      const context = new AgentContext({ agentName: "test", goal: "test" });
+      const executionContext: ToolExecutionContext = {
+        agentContext: context,
+        metadata: {},
+      };
+
+      const result = await wrappedTool.execute({}, executionContext);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.output).toEqual({ data: "test" });
+      }
     });
   });
 });

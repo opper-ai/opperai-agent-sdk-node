@@ -10,6 +10,21 @@ import type {
 import { ToolResultFactory } from "../base/tool";
 
 /**
+ * Type guard to check if a value is a ToolResult object.
+ * Used to detect when a tool function returns a ToolResult directly
+ * (instead of a raw value) to avoid double-wrapping.
+ */
+const isToolResult = (value: unknown): value is ToolResult<unknown> => {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj["success"] === "boolean" &&
+    typeof obj["toolName"] === "string" &&
+    ("output" in obj || "error" in obj)
+  );
+};
+
+/**
  * Safe access to Reflect metadata API (from reflect-metadata package).
  * Returns undefined if reflect-metadata is not installed.
  */
@@ -326,6 +341,11 @@ export function createFunctionTool<TInput, TOutput>(
           );
         } else {
           result = await Promise.resolve(fn(input, context));
+        }
+
+        // If fn already returned a ToolResult, use it directly (don't double-wrap)
+        if (isToolResult(result)) {
+          return result as ToolResult<TOutput>;
         }
 
         return ToolResultFactory.success(name, result, {

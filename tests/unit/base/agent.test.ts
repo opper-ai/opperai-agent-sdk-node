@@ -322,6 +322,53 @@ describe("BaseAgent", () => {
       const result = await agent.process("test");
       expect(result).toBe("Processed: test");
     });
+
+    it("triggers tool:error hook when tool returns failure result", async () => {
+      class ToolErrorAgent extends TestAgent {
+        public async testExecuteTool(
+          toolName: string,
+          input: unknown,
+          context: AgentContext,
+        ) {
+          return this.executeTool(toolName, input, context);
+        }
+      }
+
+      const agent = new ToolErrorAgent({ name: "tool-error-hook" });
+
+      // Tool that returns a failure result (not throws)
+      const failingTool: Tool<unknown, unknown> = {
+        name: "failing-tool",
+        schema: z.unknown(),
+        execute: async () =>
+          ToolResultFactory.failure("failing-tool", new Error("Tool failed")),
+      };
+
+      agent.addTool(failingTool);
+
+      const errorHook = vi.fn();
+      const afterHook = vi.fn();
+
+      agent.registerHook(HookEvents.ToolError, errorHook);
+      agent.registerHook(HookEvents.AfterTool, afterHook);
+
+      const context = new AgentContext({ agentName: "tool-error-hook" });
+      await agent.testExecuteTool("failing-tool", {}, context);
+
+      // Both hooks should fire for returned failures
+      expect(errorHook).toHaveBeenCalledOnce();
+      expect(afterHook).toHaveBeenCalledOnce();
+
+      // Verify error hook received the error
+      expect(errorHook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.any(Object),
+          tool: failingTool,
+          toolName: "failing-tool",
+          error: expect.any(Error),
+        }),
+      );
+    });
   });
 
   describe("Tool management", () => {
