@@ -746,6 +746,16 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
         metadata: {},
       });
 
+      // Trigger tool-error hook for returned failures (not just thrown exceptions)
+      if (!result.success) {
+        await this.triggerHook(HookEvents.ToolError, {
+          context,
+          tool,
+          toolName: tool.name,
+          error: result.error,
+        });
+      }
+
       // Trigger after-tool hook
       await this.triggerHook(HookEvents.AfterTool, {
         context,
