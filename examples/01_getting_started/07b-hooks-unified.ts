@@ -126,7 +126,7 @@ Keep responses concise.
   console.log("=".repeat(60));
 
   // Expected events for this execution (non-streaming, with tool call, no memory operations)
-  const expectedEvents = new Set([
+  const expectedEvents: Set<string> = new Set([
     HookEvents.AgentStart,
     HookEvents.AgentEnd,
     HookEvents.LoopStart,

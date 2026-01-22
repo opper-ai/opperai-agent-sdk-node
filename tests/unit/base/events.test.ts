@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { BaseAgent, type BaseAgentConfig } from "@/base/agent";
+import { BaseAgent } from "@/base/agent";
 import { AgentContext } from "@/base/context";
 import { AgentEvents } from "@/base/events";
 import { HookEvents, type HookEventName } from "@/base/hooks";
