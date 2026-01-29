@@ -605,6 +605,126 @@ describe("BaseAgent", () => {
       expect(recordSpy).toHaveBeenCalled();
     });
 
+    it("provides consistent toolCallId across tool:before and tool:after hooks", async () => {
+      class ExecuteToolAgent extends TestAgent {
+        public async testExecuteTool(
+          toolName: string,
+          input: unknown,
+          context: AgentContext,
+        ) {
+          return this.executeTool(toolName, input, context);
+        }
+      }
+
+      const agent = new ExecuteToolAgent({ name: "toolcallid-test" });
+
+      const tool: Tool<unknown, unknown> = {
+        name: "id-test-tool",
+        schema: z.unknown(),
+        execute: async () =>
+          ToolResultFactory.success("id-test-tool", { result: "ok" }),
+      };
+
+      agent.addTool(tool);
+
+      let beforeToolCallId: string | undefined;
+      let afterRecordId: string | undefined;
+
+      agent.registerHook(HookEvents.BeforeTool, ({ toolCallId }) => {
+        beforeToolCallId = toolCallId;
+      });
+
+      agent.registerHook(HookEvents.AfterTool, ({ record }) => {
+        afterRecordId = record.id;
+      });
+
+      const context = new AgentContext({ agentName: "toolcallid-test" });
+      await agent.testExecuteTool("id-test-tool", {}, context);
+
+      expect(beforeToolCallId).toBeDefined();
+      expect(afterRecordId).toBeDefined();
+      expect(beforeToolCallId).toBe(afterRecordId);
+    });
+
+    it("provides toolCallId in tool:error hook", async () => {
+      class ExecuteToolAgent extends TestAgent {
+        public async testExecuteTool(
+          toolName: string,
+          input: unknown,
+          context: AgentContext,
+        ) {
+          return this.executeTool(toolName, input, context);
+        }
+      }
+
+      const agent = new ExecuteToolAgent({ name: "toolcallid-error-test" });
+
+      const tool: Tool<unknown, unknown> = {
+        name: "failing-tool",
+        schema: z.unknown(),
+        execute: async () =>
+          ToolResultFactory.failure("failing-tool", new Error("Failed")),
+      };
+
+      agent.addTool(tool);
+
+      let beforeToolCallId: string | undefined;
+      let errorToolCallId: string | undefined;
+      let afterRecordId: string | undefined;
+
+      agent.registerHook(HookEvents.BeforeTool, ({ toolCallId }) => {
+        beforeToolCallId = toolCallId;
+      });
+
+      agent.registerHook(HookEvents.ToolError, ({ toolCallId }) => {
+        errorToolCallId = toolCallId;
+      });
+
+      agent.registerHook(HookEvents.AfterTool, ({ record }) => {
+        afterRecordId = record.id;
+      });
+
+      const context = new AgentContext({ agentName: "toolcallid-error-test" });
+      await agent.testExecuteTool("failing-tool", {}, context);
+
+      expect(beforeToolCallId).toBeDefined();
+      expect(errorToolCallId).toBeDefined();
+      expect(afterRecordId).toBeDefined();
+      expect(beforeToolCallId).toBe(errorToolCallId);
+      expect(beforeToolCallId).toBe(afterRecordId);
+    });
+
+    it("provides toolCallId in tool:error hook for non-existent tool", async () => {
+      class ExecuteToolAgent extends TestAgent {
+        public async testExecuteTool(
+          toolName: string,
+          input: unknown,
+          context: AgentContext,
+        ) {
+          return this.executeTool(toolName, input, context);
+        }
+      }
+
+      const agent = new ExecuteToolAgent({ name: "toolcallid-notfound-test" });
+
+      let errorToolCallId: string | undefined;
+
+      agent.registerHook(HookEvents.ToolError, ({ toolCallId }) => {
+        errorToolCallId = toolCallId;
+      });
+
+      const context = new AgentContext({
+        agentName: "toolcallid-notfound-test",
+      });
+      await agent.testExecuteTool("non-existent-tool", {}, context);
+
+      expect(errorToolCallId).toBeDefined();
+      // Verify it's a valid UUID format
+      expect(errorToolCallId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+    });
+
     it("records tool call in context", async () => {
       class ExecuteToolAgent extends TestAgent {
         public async testExecuteTool(

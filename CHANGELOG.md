@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `toolCallId` in `tool:before` and `tool:error` hook payloads for correlating tool events in async environments
+  - `toolCallId` in `BeforeTool` matches `record.id` in `AfterTool` and `toolCallId` in `ToolError`
+  - Enables reliable tracking of concurrent tool calls
+
 ## [0.4.1] - 2026-01-22
 
 ### Fixed

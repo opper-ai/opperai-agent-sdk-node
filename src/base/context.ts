@@ -212,7 +212,9 @@ export class AgentContext {
     return parsed;
   }
 
-  public recordToolCall(call: Omit<ToolCallRecord, "id">): ToolCallRecord {
+  public recordToolCall(
+    call: Omit<ToolCallRecord, "id"> & { id?: string },
+  ): ToolCallRecord {
     const parsed = ToolCallRecordSchema.parse(call);
     this.toolCalls.push(parsed);
     this.touch();

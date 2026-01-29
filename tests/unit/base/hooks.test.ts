@@ -285,16 +285,20 @@ describe("HookManager", () => {
 
       manager.on(HookEvents.BeforeTool, handler);
 
+      const toolCallId = "test-tool-call-id";
+
       await manager.emit(HookEvents.BeforeTool, {
         context,
         tool,
         input: toolInput,
+        toolCallId,
       });
 
       expect(handler).toHaveBeenCalledWith({
         context,
         tool,
         input: toolInput,
+        toolCallId,
       });
       const firstCall = handler.mock.calls[0];
       expect(firstCall).toBeDefined();

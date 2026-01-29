@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ZodType } from "zod";
 
 import type { AgentContext, Usage } from "./context";
@@ -300,7 +301,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     // Initialize Opper configuration with environment fallback
     this.opperConfig = {
       apiKey: config.opperConfig?.apiKey ?? process.env["OPPER_API_KEY"],
-      baseUrl: config.opperConfig?.baseUrl,
+      baseUrl: config.opperConfig?.baseUrl ?? process.env["OPPER_BASE_URL"],
       ...config.opperConfig,
     };
 
@@ -675,6 +676,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     context: AgentContext,
     options?: { signal?: AbortSignal; spanId?: string },
   ): Promise<ToolResult<unknown>> {
+    const toolCallId = randomUUID();
     const tool = this.tools.get(toolName);
 
     if (!tool) {
@@ -686,6 +688,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
       const timestamp = Date.now();
 
       context.recordToolCall({
+        id: toolCallId,
         toolName,
         input,
         success: false,
@@ -702,6 +705,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
         context,
         toolName,
         error: failure.error,
+        toolCallId,
       });
 
       return failure;
@@ -722,6 +726,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
         context,
         tool,
         input,
+        toolCallId,
       });
 
       // Execute the tool
@@ -731,6 +736,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
 
       // Record the tool call
       const record = context.recordToolCall({
+        id: toolCallId,
         toolName: tool.name,
         input,
         ...(result.success && { output: result.output }),
@@ -753,6 +759,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
           tool,
           toolName: tool.name,
           error: result.error,
+          toolCallId,
         });
       }
 
@@ -776,6 +783,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
       );
 
       const record = context.recordToolCall({
+        id: toolCallId,
         toolName: tool.name,
         input,
         success: false,
@@ -794,6 +802,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
         tool,
         toolName: tool.name,
         error,
+        toolCallId,
       });
 
       // Ensure after-tool observers see the recorded failure

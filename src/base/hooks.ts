@@ -58,6 +58,7 @@ export interface HookPayloadMap {
     context: AgentContext;
     tool: Tool<unknown, unknown>;
     input: unknown;
+    toolCallId: string;
   };
   [HookEvents.AfterTool]: {
     context: AgentContext;
@@ -70,6 +71,7 @@ export interface HookPayloadMap {
     toolName: string;
     tool?: Tool<unknown, unknown>;
     error: unknown;
+    toolCallId: string;
   };
   [HookEvents.MemoryRead]: {
     context: AgentContext;
