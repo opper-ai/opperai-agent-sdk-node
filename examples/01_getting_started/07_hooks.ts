@@ -197,13 +197,15 @@ Keep your responses concise.
 
   // --- Tool Execution Hooks ---
 
-  agent.registerHook(HookEvents.BeforeTool, ({ tool, input }) => {
+  agent.registerHook(HookEvents.BeforeTool, ({ tool, input, toolCallId }) => {
     console.log(`   🔧 [tool:before] ${tool.name}`);
+    console.log(`      Tool Call ID: ${toolCallId}`);
     console.log(`      Input: ${JSON.stringify(input)}`);
   });
 
   agent.registerHook(HookEvents.AfterTool, ({ tool, result, record }) => {
     console.log(`   ✅ [tool:after] ${tool.name}`);
+    console.log(`      Record ID: ${record.id}`);
     console.log(`      Success: ${result.success}`);
     const duration = record.finishedAt
       ? record.finishedAt - record.startedAt
@@ -216,8 +218,9 @@ Keep your responses concise.
     }
   });
 
-  agent.registerHook(HookEvents.ToolError, ({ toolName, error }) => {
+  agent.registerHook(HookEvents.ToolError, ({ toolName, error, toolCallId }) => {
     console.log(`   ❌ [tool:error] ${toolName}`);
+    console.log(`      Tool Call ID: ${toolCallId}`);
     console.log(`      Error: ${error}`);
   });
 
