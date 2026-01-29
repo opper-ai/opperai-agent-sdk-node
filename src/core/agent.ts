@@ -171,6 +171,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       config.opperClient ??
       new OpperClient(this.opperConfig.apiKey, {
         logger: this.logger,
+        ...(this.opperConfig.baseUrl && { baseUrl: this.opperConfig.baseUrl }),
       });
   }
 
