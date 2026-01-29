@@ -233,11 +233,18 @@ export class OpperClient {
     options: {
       logger?: AgentLogger;
       retryConfig?: Partial<RetryConfig>;
+      /**
+       * Override the default Opper API server URL.
+       * Useful for local development or self-hosted deployments.
+       * Example: "http://127.0.0.1:8000/v2"
+       */
+      baseUrl?: string;
     } = {},
   ) {
     this.client = new Opper({
       httpBearer: apiKey ?? process.env["OPPER_HTTP_BEARER"] ?? "",
       userAgent: getUserAgent(),
+      ...(options.baseUrl && { serverURL: options.baseUrl }),
     });
     this.logger = options.logger ?? getDefaultLogger();
     this.retryConfig = {
@@ -524,6 +531,12 @@ export function createOpperClient(
   options?: {
     logger?: AgentLogger;
     retryConfig?: Partial<RetryConfig>;
+    /**
+     * Override the default Opper API server URL.
+     * Useful for local development or self-hosted deployments.
+     * Example: "http://127.0.0.1:8000/v2"
+     */
+    baseUrl?: string;
   },
 ): OpperClient {
   return new OpperClient(apiKey, options);
