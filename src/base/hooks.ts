@@ -1,7 +1,20 @@
 import type { AgentContext } from "./context";
 import type { Tool, ToolCallRecord, ToolResult } from "./tool";
+import type {
+  OpperCallResponse,
+  OpperStreamResponse,
+} from "../opper/client";
 import type { AgentLogger } from "../utils/logger";
 import { getDefaultLogger } from "../utils/logger";
+
+/** The two LLM call phases in the agent loop */
+export type LlmCallType = "think" | "final_result";
+
+/** Thought summary emitted by the ThinkEnd hook */
+export interface AgentThought {
+  reasoning: string;
+  userMessage: string;
+}
 
 export const HookEvents = {
   AgentStart: "agent:start",
@@ -42,17 +55,17 @@ export interface HookPayloadMap {
   };
   [HookEvents.LlmCall]: {
     context: AgentContext;
-    callType: string;
+    callType: LlmCallType;
   };
   [HookEvents.LlmResponse]: {
     context: AgentContext;
-    callType: string;
-    response: unknown;
+    callType: LlmCallType;
+    response: OpperCallResponse | OpperStreamResponse;
     parsed?: unknown;
   };
   [HookEvents.ThinkEnd]: {
     context: AgentContext;
-    thought: unknown;
+    thought: AgentThought;
   };
   [HookEvents.BeforeTool]: {
     context: AgentContext;
@@ -90,13 +103,13 @@ export interface HookPayloadMap {
   };
   [HookEvents.StreamStart]: {
     context: AgentContext;
-    callType: string;
+    callType: LlmCallType;
   };
   [HookEvents.StreamChunk]: {
     context: AgentContext;
-    callType: string;
+    callType: LlmCallType;
     chunkData: {
-      delta: unknown;
+      delta: string | number | boolean | null | undefined;
       jsonPath?: string | null;
       chunkType?: string | null;
     };
@@ -105,17 +118,36 @@ export interface HookPayloadMap {
   };
   [HookEvents.StreamEnd]: {
     context: AgentContext;
-    callType: string;
+    callType: LlmCallType;
     fieldBuffers: Record<string, string>;
   };
   [HookEvents.StreamError]: {
     context: AgentContext;
-    callType: string;
+    callType: LlmCallType;
     error: unknown;
   };
 }
 
 export type HookPayload<E extends HookEventName> = HookPayloadMap[E];
+
+// Named payload exports for convenient consumer imports
+export type AgentStartPayload = HookPayloadMap[typeof HookEvents.AgentStart];
+export type AgentEndPayload = HookPayloadMap[typeof HookEvents.AgentEnd];
+export type LoopStartPayload = HookPayloadMap[typeof HookEvents.LoopStart];
+export type LoopEndPayload = HookPayloadMap[typeof HookEvents.LoopEnd];
+export type LlmCallPayload = HookPayloadMap[typeof HookEvents.LlmCall];
+export type LlmResponsePayload = HookPayloadMap[typeof HookEvents.LlmResponse];
+export type ThinkEndPayload = HookPayloadMap[typeof HookEvents.ThinkEnd];
+export type BeforeToolPayload = HookPayloadMap[typeof HookEvents.BeforeTool];
+export type AfterToolPayload = HookPayloadMap[typeof HookEvents.AfterTool];
+export type ToolErrorPayload = HookPayloadMap[typeof HookEvents.ToolError];
+export type MemoryReadPayload = HookPayloadMap[typeof HookEvents.MemoryRead];
+export type MemoryWritePayload = HookPayloadMap[typeof HookEvents.MemoryWrite];
+export type MemoryErrorPayload = HookPayloadMap[typeof HookEvents.MemoryError];
+export type StreamStartPayload = HookPayloadMap[typeof HookEvents.StreamStart];
+export type StreamChunkPayload = HookPayloadMap[typeof HookEvents.StreamChunk];
+export type StreamEndPayload = HookPayloadMap[typeof HookEvents.StreamEnd];
+export type StreamErrorPayload = HookPayloadMap[typeof HookEvents.StreamError];
 
 export type HookHandler<E extends HookEventName> = (
   payload: HookPayload<E>,
