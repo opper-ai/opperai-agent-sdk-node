@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `LlmCallType` union type (`"think" | "final_result"`) replacing `string` on all `callType` hook fields
+- `AgentThought` interface for typed `ThinkEnd` hook payloads (`{ reasoning, userMessage }`)
+- `ExecutionThought` interface for typed `ExecutionCycle.thought` (`{ reasoning, memoryReads?, memoryUpdates? }`)
+- Named payload type exports for all 17 hook events (e.g., `BeforeToolPayload`, `LlmCallPayload`, `StreamChunkPayload`)
+  - Consumers can now `import { BeforeToolPayload }` directly instead of using `HookPayload<typeof HookEvents.BeforeTool>`
+- Narrowed `LlmResponse.response` type to `OpperCallResponse | OpperStreamResponse`
+- Narrowed `StreamChunk.chunkData.delta` type to `string | number | boolean | null | undefined`
+
 ## [0.5.0] - 2026-01-29
 
 ### Added

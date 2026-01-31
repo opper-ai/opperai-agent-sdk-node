@@ -80,7 +80,25 @@ export const ExecutionCycleSchema = z.object({
   timestamp: z.number().default(() => Date.now()),
 });
 
-export type ExecutionCycle = z.infer<typeof ExecutionCycleSchema>;
+/** Structured thought recorded during an execution cycle */
+export interface ExecutionThought {
+  reasoning: string;
+  memoryReads?: string[];
+  memoryUpdates?: Record<string, unknown>;
+}
+
+/**
+ * A single iteration of the agent's think-act loop.
+ * The Zod schema (`ExecutionCycleSchema`) handles runtime parsing;
+ * this interface provides precise TypeScript types for `thought`.
+ */
+export interface ExecutionCycle {
+  iteration: number;
+  thought?: ExecutionThought | null;
+  toolCalls: ToolCallRecord[];
+  results: unknown[];
+  timestamp: number;
+}
 
 export interface AgentContextOptions {
   agentName: string;
@@ -206,7 +224,7 @@ export class AgentContext {
   }
 
   public addCycle(cycle: ExecutionCycle): ExecutionCycle {
-    const parsed = ExecutionCycleSchema.parse(cycle);
+    const parsed = ExecutionCycleSchema.parse(cycle) as ExecutionCycle;
     this.executionHistory.push(parsed);
     this.touch();
     return parsed;
@@ -236,7 +254,7 @@ export class AgentContext {
     return this.getLastNCycles(count).map((cycle) => {
       const thought: Record<string, unknown> =
         typeof cycle.thought === "object" && cycle.thought !== null
-          ? { ...(cycle.thought as Record<string, unknown>) }
+          ? { ...cycle.thought }
           : { text: cycle.thought };
 
       return {

@@ -399,7 +399,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
     this.log("Think step", { iteration: context.iteration });
 
     // Trigger hook: llm_call
-    await this.triggerHook(HookEvents.LlmCall, { context, callType: "think" });
+    await this.triggerHook(HookEvents.LlmCall, { context, callType: "think" as const });
 
     // Create dynamic schema with typed finalResult if outputSchema is specified
     const decisionSchema = createAgentDecisionWithOutputSchema(
@@ -447,7 +447,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       // Trigger hook: llm_response
       await this.triggerHook(HookEvents.LlmResponse, {
         context,
-        callType: "think",
+        callType: "think" as const,
         response,
       });
 
@@ -498,7 +498,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
     await this.triggerHook(HookEvents.StreamStart, {
       context,
-      callType: "think",
+      callType: "think" as const,
     });
 
     try {
@@ -535,7 +535,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
         const chunkPayload = {
           context,
-          callType: "think",
+          callType: "think" as const,
           chunkData: {
             delta: data.delta,
             jsonPath: data.jsonPath ?? null,
@@ -551,7 +551,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
       const fieldBuffers = assembler.snapshot();
       const endPayload = {
         context,
-        callType: "think",
+        callType: "think" as const,
         fieldBuffers,
       };
       await this.triggerHook(HookEvents.StreamEnd, endPayload);
@@ -585,7 +585,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       await this.triggerHook(HookEvents.LlmResponse, {
         context,
-        callType: "think",
+        callType: "think" as const,
         response: streamResponse,
         parsed: decision,
       });
@@ -622,7 +622,7 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
     } catch (error) {
       await this.triggerHook(HookEvents.StreamError, {
         context,
-        callType: "think",
+        callType: "think" as const,
         error,
       });
       this.logger.error("Think step failed", error);
@@ -734,9 +734,7 @@ The memory you write persists across all process() calls on this agent.`;
       // Extract reasoning from thought
       const thought =
         typeof cycle.thought === "object" && cycle.thought !== null
-          ? ((cycle.thought as Record<string, unknown>)[
-              "reasoning"
-            ] as string) || ""
+          ? cycle.thought.reasoning || ""
           : String(cycle.thought || "");
 
       // Map results to summary format
@@ -1264,7 +1262,7 @@ Follow any instructions provided for formatting and style.`;
 
     await this.triggerHook(HookEvents.StreamStart, {
       context,
-      callType: "final_result",
+      callType: "final_result" as const,
     });
 
     try {
@@ -1305,7 +1303,7 @@ Follow any instructions provided for formatting and style.`;
 
         const chunkPayload = {
           context,
-          callType: "final_result",
+          callType: "final_result" as const,
           chunkData: {
             delta: data.delta,
             jsonPath: data.jsonPath ?? null,
@@ -1321,7 +1319,7 @@ Follow any instructions provided for formatting and style.`;
       const fieldBuffers = assembler.snapshot();
       const endPayload = {
         context,
-        callType: "final_result",
+        callType: "final_result" as const,
         fieldBuffers,
       };
       await this.triggerHook(HookEvents.StreamEnd, endPayload);
@@ -1365,7 +1363,7 @@ Follow any instructions provided for formatting and style.`;
 
       await this.triggerHook(HookEvents.LlmResponse, {
         context,
-        callType: "final_result",
+        callType: "final_result" as const,
         response: streamResponse,
         parsed: result,
       });
@@ -1380,7 +1378,7 @@ Follow any instructions provided for formatting and style.`;
     } catch (error) {
       await this.triggerHook(HookEvents.StreamError, {
         context,
-        callType: "final_result",
+        callType: "final_result" as const,
         error,
       });
       this.logger.error("Failed to generate final result", error);

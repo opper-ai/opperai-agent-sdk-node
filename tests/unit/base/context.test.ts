@@ -6,6 +6,7 @@ import {
   UsageSchema,
   createEmptyUsage,
   addUsage,
+  type ExecutionCycle,
 } from "@/base/context";
 import { ToolCallRecordSchema, ToolResultFactory } from "@/base/tool";
 
@@ -43,7 +44,7 @@ describe("AgentContext", () => {
       thought: { reasoning: "test" },
       toolCalls: [toolCall],
       results: [ToolResultFactory.success("search", { value: 42 })],
-    });
+    }) as ExecutionCycle;
 
     context.addCycle(cycle);
 
