@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-02
+
+### Added
+
+- `LlmCallType` union type (`"think" | "final_result"`) replacing `string` on all `callType` hook fields
+- `AgentThought` interface for typed `ThinkEnd` hook payloads (`{ reasoning, userMessage }`)
+- `ExecutionThought` interface for typed `ExecutionCycle.thought` (`{ reasoning, memoryReads?, memoryUpdates? }`)
+- Named payload type exports for all 17 hook events (e.g., `BeforeToolPayload`, `LlmCallPayload`, `StreamChunkPayload`)
+  - Consumers can now `import { BeforeToolPayload }` directly instead of using `HookPayload<typeof HookEvents.BeforeTool>`
+- Narrowed `LlmResponse.response` type to `OpperCallResponse | OpperStreamResponse`
+- Narrowed `StreamChunk.chunkData.delta` type to `string | number | boolean | null | undefined`
+
+### Migration notes
+
+- Code that casts `thought` to `Record<string, unknown>` (e.g., `thought as Record<string, unknown>`) will now produce a type error. Use the typed properties directly instead (e.g., `thought.reasoning`).
+- `callType` fields in hook payloads are now `LlmCallType` (`"think" | "final_result"`) instead of `string`. Code that assigns `callType` to a `string` variable will need a type annotation update.
+
 ## [0.5.0] - 2026-01-29
 
 ### Added

@@ -172,12 +172,8 @@ Research Process:
     previousTotalTokens = currentTotalTokens;
 
     // Log reasoning
-    if (latest?.thought && typeof latest.thought === "object") {
-      const thought = latest.thought as Record<string, unknown>;
-      const reasoning = thought["reasoning"];
-      if (typeof reasoning === "string") {
-        console.log(`\n[Iteration ${latest.iteration}] ${reasoning}`);
-      }
+    if (latest?.thought?.reasoning) {
+      console.log(`\n[Iteration ${latest.iteration}] ${latest.thought.reasoning}`);
     }
 
     // Log token usage for this iteration

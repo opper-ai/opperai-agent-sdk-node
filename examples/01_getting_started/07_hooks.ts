@@ -183,15 +183,9 @@ Keep your responses concise.
 
   agent.registerHook(HookEvents.ThinkEnd, ({ context, thought }) => {
     console.log(`   💭 [think:end]`);
-    if (thought && typeof thought === "object") {
-      const thoughtObj = thought as Record<string, unknown>;
-      if ("reasoning" in thoughtObj) {
-        console.log(`      Reasoning: ${thoughtObj["reasoning"]}`);
-      }
-      if ("toolCalls" in thoughtObj) {
-        const toolCalls = thoughtObj["toolCalls"] as unknown[];
-        console.log(`      Planned tool calls: ${toolCalls.length}`);
-      }
+    if (thought) {
+      console.log(`      Reasoning: ${thought.reasoning}`);
+      console.log(`      User message: ${thought.userMessage}`);
     }
   });
 

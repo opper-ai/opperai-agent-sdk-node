@@ -291,15 +291,8 @@ Guidelines:
     }
 
     const thought = latest.thought;
-    if (
-      thought &&
-      typeof thought === "object" &&
-      "reasoning" in (thought as Record<string, unknown>)
-    ) {
-      const reasoning = (thought as Record<string, unknown>)["reasoning"];
-      if (typeof reasoning === "string" && reasoning.trim().length > 0) {
-        console.log(`\n[Iteration ${latest.iteration}] ${reasoning}\n`);
-      }
+    if (thought?.reasoning && thought.reasoning.trim().length > 0) {
+      console.log(`\n[Iteration ${latest.iteration}] ${thought.reasoning}\n`);
     }
   });
 
