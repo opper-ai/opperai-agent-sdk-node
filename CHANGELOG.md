@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Narrowed `LlmResponse.response` type to `OpperCallResponse | OpperStreamResponse`
 - Narrowed `StreamChunk.chunkData.delta` type to `string | number | boolean | null | undefined`
 
+### Migration notes
+
+- Code that casts `thought` to `Record<string, unknown>` (e.g., `thought as Record<string, unknown>`) will now produce a type error. Use the typed properties directly instead (e.g., `thought.reasoning`).
+- `callType` fields in hook payloads are now `LlmCallType` (`"think" | "final_result"`) instead of `string`. Code that assigns `callType` to a `string` variable will need a type annotation update.
+
 ## [0.5.0] - 2026-01-29
 
 ### Added
