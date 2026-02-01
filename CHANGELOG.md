@@ -21,8 +21,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration notes
 
-- Code that casts `thought` to `Record<string, unknown>` (e.g., `thought as Record<string, unknown>`) will now produce a type error. Use the typed properties directly instead (e.g., `thought.reasoning`).
-- `callType` fields in hook payloads are now `LlmCallType` (`"think" | "final_result"`) instead of `string`. Code that assigns `callType` to a `string` variable will need a type annotation update.
+- Code that casts `thought` to `Record<string, unknown>` will now produce a type error. Use the typed properties directly instead:
+
+  ```typescript
+  // Before
+  const reasoning = (thought as Record<string, unknown>)["reasoning"];
+
+  // After
+  const reasoning = thought.reasoning;
+  ```
+
+- `callType` fields in hook payloads are now `LlmCallType` (`"think" | "final_result"`) instead of `string`. Code that assigns `callType` to a `string` variable will need a type annotation update:
+
+  ```typescript
+  // Before
+  const type: string = payload.callType;
+
+  // After
+  const type: LlmCallType = payload.callType;
+  ```
 
 ## [0.5.0] - 2026-01-29
 
