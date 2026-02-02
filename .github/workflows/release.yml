@@ -109,15 +109,22 @@ jobs:
         run: |
           echo "🔄 Updating version to ${{ needs.check-version.outputs.version }}"
 
-          # Update version in package.json
-          pnpm version ${{ needs.check-version.outputs.version }} --no-git-tag-version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          TARGET_VERSION="${{ needs.check-version.outputs.version }}"
 
-          # Commit the version update
-          git config --global user.name "opper-bot"
-          git config --global user.email "bot@opper.ai"
-          git add package.json
-          git commit -m "chore: bump version to ${{ needs.check-version.outputs.version }}"
-          git push
+          if [ "$CURRENT_VERSION" = "$TARGET_VERSION" ]; then
+            echo "✅ Version already at $TARGET_VERSION, skipping bump"
+          else
+            # Update version in package.json
+            pnpm version $TARGET_VERSION --no-git-tag-version
+
+            # Commit the version update
+            git config --global user.name "opper-bot"
+            git config --global user.email "bot@opper.ai"
+            git add package.json
+            git commit -m "chore: bump version to $TARGET_VERSION"
+            git push
+          fi
 
       - name: Run quality checks
         run: |
