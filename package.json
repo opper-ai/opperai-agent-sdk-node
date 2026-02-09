@@ -1,6 +1,6 @@
 {
   "name": "@opperai/agents",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "TypeScript SDK for building Opper AI agents",
   "type": "module",
   "engines": {
