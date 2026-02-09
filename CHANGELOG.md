@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-02-09
+
+### Fixed
+
+- Defer span updates to the end of an agent run to avoid Opper replication race conditions
+
 ## [0.6.0] - 2026-02-02
 
 ### Added

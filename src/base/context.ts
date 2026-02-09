@@ -129,6 +129,16 @@ export interface IterationSummary {
   results: unknown[];
 }
 
+export interface PendingSpanUpdate {
+  spanId: string;
+  output?: unknown;
+  error?: string;
+  startTime?: Date;
+  endTime?: Date;
+  meta?: Record<string, unknown>;
+  name?: string;
+}
+
 export class AgentContext {
   public readonly agentName: string;
 
@@ -151,6 +161,8 @@ export class AgentContext {
   public readonly startedAt: number;
 
   public updatedAt: number;
+
+  public pendingSpanUpdates: PendingSpanUpdate[] = [];
 
   constructor(options: AgentContextOptions) {
     const now = Date.now();

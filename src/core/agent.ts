@@ -7,7 +7,7 @@ import {
   createAgentDecisionWithOutputSchema,
 } from "./schemas";
 import { BaseAgent, type BaseAgentConfig } from "../base/agent";
-import type { AgentContext } from "../base/context";
+import type { AgentContext, PendingSpanUpdate } from "../base/context";
 import { HookEvents } from "../base/hooks";
 import type { ToolSuccess } from "../base/tool";
 import { OpperClient } from "../opper/client";
@@ -188,6 +188,36 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
     return String(input);
   }
 
+  private queueSpanUpdate(
+    context: AgentContext,
+    update: PendingSpanUpdate,
+  ): void {
+    context.pendingSpanUpdates.push(update);
+  }
+
+  private async flushPendingSpanUpdates(context: AgentContext): Promise<void> {
+    const updates = context.pendingSpanUpdates.splice(
+      0,
+      context.pendingSpanUpdates.length,
+    );
+    if (updates.length === 0) {
+      return;
+    }
+
+    await Promise.allSettled(
+      updates.map((update) => {
+        const options = {
+          ...(update.error !== undefined && { error: update.error }),
+          ...(update.startTime && { startTime: update.startTime }),
+          ...(update.endTime && { endTime: update.endTime }),
+          ...(update.meta && { meta: update.meta }),
+          ...(update.name && { name: update.name }),
+        };
+        return this.opperClient.updateSpan(update.spanId, update.output, options);
+      }),
+    );
+  }
+
   /**
    * Main agent loop: think → tool execution → memory handling → repeat until complete
    */
@@ -282,11 +312,14 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
             // Update parent span with final output and timing
             const executionEndTime = new Date();
-            await this.opperClient.updateSpan(parentSpan.id, finalResult, {
+            this.queueSpanUpdate(context, {
+              spanId: parentSpan.id,
+              output: finalResult,
               startTime: executionStartTime,
               endTime: executionEndTime,
               meta: {
-                durationMs: executionEndTime.getTime() - executionStartTime.getTime(),
+                durationMs:
+                  executionEndTime.getTime() - executionStartTime.getTime(),
               },
             });
 
@@ -362,7 +395,9 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       // Update parent span with final output and timing
       const executionEndTime = new Date();
-      await this.opperClient.updateSpan(parentSpan.id, result, {
+      this.queueSpanUpdate(context, {
+        spanId: parentSpan.id,
+        output: result,
         startTime: executionStartTime,
         endTime: executionEndTime,
         meta: {
@@ -374,7 +409,8 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
     } catch (error) {
       // Update parent span with error and timing
       const executionEndTime = new Date();
-      await this.opperClient.updateSpan(parentSpan.id, undefined, {
+      this.queueSpanUpdate(context, {
+        spanId: parentSpan.id,
         error: error instanceof Error ? error.message : String(error),
         startTime: executionStartTime,
         endTime: executionEndTime,
@@ -383,6 +419,8 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
         },
       });
       throw error;
+    } finally {
+      await this.flushPendingSpanUpdates(context);
     }
   }
 
@@ -453,7 +491,8 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       // Rename span to simpler "think" (function name remains detailed for Opper)
       if (response.spanId) {
-        await this.opperClient.updateSpan(response.spanId, undefined, {
+        this.queueSpanUpdate(context, {
+          spanId: response.spanId,
           name: "think",
         });
       }
@@ -592,7 +631,8 @@ export class Agent<TInput = unknown, TOutput = unknown> extends BaseAgent<
 
       // Rename span to simpler "think" (function name remains detailed for Opper)
       if (streamSpanId) {
-        await this.opperClient.updateSpan(streamSpanId, undefined, {
+        this.queueSpanUpdate(context, {
+          spanId: streamSpanId,
           name: "think",
         });
       }
@@ -857,13 +897,16 @@ The memory you write persists across all process() calls on this agent.`;
 
         // Update tool span with result and timing
         if (result.success) {
-          await this.opperClient.updateSpan(toolSpan.id, result.output, {
+          this.queueSpanUpdate(context, {
+            spanId: toolSpan.id,
+            output: result.output,
             startTime,
             endTime,
             meta: { durationMs },
           });
         } else {
-          await this.opperClient.updateSpan(toolSpan.id, undefined, {
+          this.queueSpanUpdate(context, {
+            spanId: toolSpan.id,
             error:
               result.error instanceof Error
                 ? result.error.message
@@ -902,7 +945,8 @@ The memory you write persists across all process() calls on this agent.`;
         const durationMs = endTime.getTime() - startTime.getTime();
 
         // Update span with error and timing
-        await this.opperClient.updateSpan(toolSpan.id, undefined, {
+        this.queueSpanUpdate(context, {
+          spanId: toolSpan.id,
           error: error instanceof Error ? error.message : String(error),
           startTime,
           endTime,
@@ -989,7 +1033,9 @@ The memory you write persists across all process() calls on this agent.`;
           const endTime = new Date();
           const durationMs = endTime.getTime() - startTime.getTime();
 
-          await this.opperClient.updateSpan(memoryReadSpan.id, memoryData, {
+          this.queueSpanUpdate(context, {
+            spanId: memoryReadSpan.id,
+            output: memoryData,
             startTime,
             endTime,
             meta: { durationMs },
@@ -1075,15 +1121,13 @@ The memory you write persists across all process() calls on this agent.`;
         const endTime = new Date();
         const durationMs = endTime.getTime() - startTime.getTime();
 
-        await this.opperClient.updateSpan(
-          memoryWriteSpan.id,
-          `Successfully wrote ${updateEntries.length} keys`,
-          {
-            startTime,
-            endTime,
-            meta: { durationMs },
-          },
-        );
+        this.queueSpanUpdate(context, {
+          spanId: memoryWriteSpan.id,
+          output: `Successfully wrote ${updateEntries.length} keys`,
+          startTime,
+          endTime,
+          meta: { durationMs },
+        });
 
         this.log(`Wrote ${updateEntries.length} memory entries`);
 
