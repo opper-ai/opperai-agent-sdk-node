@@ -214,7 +214,7 @@ export interface RetryConfig {
  * Default retry configuration
  */
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxRetries: 3,
+  maxRetries: 0, // Retries are handled in the opper-node sdk
   initialDelayMs: 1000,
   backoffMultiplier: 2,
   maxDelayMs: 10000,
@@ -245,6 +245,7 @@ export class OpperClient {
       httpBearer: apiKey ?? process.env["OPPER_HTTP_BEARER"] ?? "",
       userAgent: getUserAgent(),
       ...(options.baseUrl && { serverURL: options.baseUrl }),
+      retryConfig: { strategy: "backoff" },
     });
     this.logger = options.logger ?? getDefaultLogger();
     this.retryConfig = {
