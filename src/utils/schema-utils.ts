@@ -86,6 +86,7 @@ export const schemaToJson = (
     // Zod 4's native toJSONSchema doesn't support options, but produces valid JSON Schema
     return zodSchemaToJsonSchema(schema) as JsonSchema7Type;
   }
+  // @ts-ignore - Zod 3/4 type mismatch with zod-to-json-schema (only reached under Zod 3)
   return zodToJsonSchema(schema, options) as JsonSchema7Type;
 };
 

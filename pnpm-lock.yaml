@@ -22,10 +22,10 @@ importers:
         version: 0.2.2
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
+        version: 4.3.6
       zod-to-json-schema:
         specifier: ^3.25.0
-        version: 3.25.0(zod@3.25.76)
+        version: 3.25.0(zod@4.3.6)
     devDependencies:
       '@eslint/js':
         specifier: ^9.37.0
@@ -2231,6 +2231,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
 snapshots:
 
   '@ampproject/remapping@2.3.0':
@@ -3843,7 +3846,7 @@ snapshots:
   opperai@3.4.0:
     dependencies:
       '@modelcontextprotocol/sdk': 1.9.0
-      zod: 3.25.76
+      zod: 4.3.6
     transitivePeerDependencies:
       - supports-color
 
@@ -4536,4 +4539,10 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
+  zod-to-json-schema@3.25.0(zod@4.3.6):
+    dependencies:
+      zod: 4.3.6
+
   zod@3.25.76: {}
+
+  zod@4.3.6: {}
