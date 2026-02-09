@@ -1146,6 +1146,82 @@ describe("Agent", () => {
     });
   });
 
+  describe("Span update batching", () => {
+    it("should defer span updates until after tool execution completes", async () => {
+      const updateSpanSpy = vi.spyOn(mockOpperClient, "updateSpan");
+
+      const tool: Tool<{ query: string }, { results: string[] }> = {
+        name: "search",
+        execute: async () => {
+          expect(updateSpanSpy).not.toHaveBeenCalled();
+          return ToolResultFactory.success("search", { results: ["ok"] });
+        },
+      };
+
+      const firstDecision = createMockDecision({
+        reasoning: "Need to search",
+        toolCalls: [
+          { id: "call-1", toolName: "search", arguments: { query: "test" } },
+        ],
+      });
+
+      const finalPayload = { answer: "done" };
+      const secondDecision = createMockDecision({
+        reasoning: "Done",
+        isComplete: true,
+        finalResult: finalPayload,
+      });
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: firstDecision,
+          spanId: "think-span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "think-span-2",
+          usage: mockUsage(80, 40),
+        });
+
+      const agent = new Agent({
+        name: "DeferredSpanAgent",
+        tools: [tool],
+        opperClient: mockOpperClient,
+      });
+
+      const result = await agent.process({ task: "test" });
+      expect(result).toBe(JSON.stringify(finalPayload));
+      expect(updateSpanSpy).toHaveBeenCalled();
+    });
+
+    it("should not fail the agent when span updates reject", async () => {
+      const mockDecision = createMockDecision({
+        reasoning: "Immediate completion",
+        isComplete: true,
+        finalResult: { result: "ok" },
+      });
+
+      vi.spyOn(mockOpperClient, "call").mockResolvedValueOnce({
+        jsonPayload: mockDecision,
+        spanId: "think-span",
+        usage: mockUsage(100, 50),
+      });
+
+      vi.spyOn(mockOpperClient, "updateSpan").mockRejectedValue(
+        new Error("span update failed"),
+      );
+
+      const agent = new Agent({
+        name: "SpanFailureAgent",
+        opperClient: mockOpperClient,
+      });
+
+      const result = await agent.process({ task: "test" });
+      expect(result).toBe(JSON.stringify({ result: "ok" }));
+    });
+  });
+
   describe("Span type tagging", () => {
     it("should create tool span with tool type", async () => {
       const tool: Tool<{ query: string }, { results: string[] }> = {

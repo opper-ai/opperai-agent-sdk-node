@@ -272,7 +272,6 @@ Always be friendly and provide complete information.`,
     ],
     maxIterations: 5,
     verbose: true,
-    model: "openai/gpt-4o-mini",
   });
 
   // Register hooks to monitor execution
