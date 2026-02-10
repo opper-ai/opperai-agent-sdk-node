@@ -80,6 +80,7 @@ describe("OpperClient", () => {
       expect(mockOpperConstructor).toHaveBeenCalledWith({
         httpBearer: "test-api-key",
         userAgent: getUserAgent(),
+        retryConfig: { strategy: "backoff" },
       });
       expect(testClient).toBeInstanceOf(OpperClient);
     });
@@ -428,6 +429,16 @@ describe("OpperClient", () => {
     });
 
     it("retries on network errors", async () => {
+      const retryingClient = new OpperClient(undefined, {
+        logger: new SilentLogger(),
+        retryConfig: {
+          maxRetries: 2,
+          initialDelayMs: 10,
+          backoffMultiplier: 2,
+          maxDelayMs: 100,
+        },
+      });
+
       let callCount = 0;
       mockCall.mockImplementation(() => {
         callCount++;
@@ -441,7 +452,7 @@ describe("OpperClient", () => {
         });
       });
 
-      const promise = client.call({
+      const promise = retryingClient.call({
         name: "retry-call",
         instructions: "Test retry",
         input: {},
@@ -453,6 +464,24 @@ describe("OpperClient", () => {
       const response = await promise;
       expect(response.message).toBe("success");
       expect(callCount).toBe(3);
+    });
+
+    it("does not retry by default", async () => {
+      let callCount = 0;
+      mockCall.mockImplementation(() => {
+        callCount++;
+        throw new Error("Network error");
+      });
+
+      await expect(
+        client.call({
+          name: "default-no-retry-call",
+          instructions: "Test default no retry",
+          input: {},
+        }),
+      ).rejects.toThrow("Network error");
+
+      expect(callCount).toBe(1);
     });
 
     it("does not retry on non-retryable errors", async () => {
@@ -630,7 +659,7 @@ describe("OpperClient", () => {
   describe("DEFAULT_RETRY_CONFIG", () => {
     it("has expected default values", () => {
       expect(DEFAULT_RETRY_CONFIG).toEqual({
-        maxRetries: 3,
+        maxRetries: 0,
         initialDelayMs: 1000,
         backoffMultiplier: 2,
         maxDelayMs: 10000,

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-02-09
+
+### Fixed
+
+- Remove duplicate retry logic in agent SDK; delegate HTTP retries (429/5xx) to opper-node with exponential backoff, jitter, and `Retry-After` header support
+- Fix Zod 4 type compatibility with `zod-to-json-schema`
+
 ## [0.7.0] - 2026-02-09
 
 ### Fixed

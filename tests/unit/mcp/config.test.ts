@@ -34,7 +34,7 @@ describe("MCPconfig", () => {
     }
 
     expect(thrown).toBeInstanceOf(ZodError);
-    const issues = (thrown as ZodError).flatten().fieldErrors;
+    const issues = (thrown as ZodError).flatten().fieldErrors as Record<string, unknown>;
     expect(issues["command"]).toBeDefined();
   });
 
