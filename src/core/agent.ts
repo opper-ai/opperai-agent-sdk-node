@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   type AgentDecision,
+  type ToolCall,
   type ToolExecutionSummary,
   ToolExecutionSummarySchema,
   createAgentDecisionWithOutputSchema,
@@ -847,129 +848,143 @@ The memory you write persists across all process() calls on this agent.`;
 
     this.log(`Executing ${decision.toolCalls.length} tool call(s)`);
 
+    if (this.parallelToolExecution && decision.toolCalls.length > 1) {
+      this.log("Executing tool calls in parallel");
+      return Promise.all(
+        decision.toolCalls.map((toolCall) =>
+          this.executeSingleToolCall(toolCall, context, parentSpanId),
+        ),
+      );
+    }
+
     const results: ToolExecutionSummary[] = [];
-
     for (const toolCall of decision.toolCalls) {
-      // Verbose: announce the tool and parameters
-      this.log(`Action: ${toolCall.toolName}`, {
-        parameters: toolCall.arguments,
-      });
+      results.push(
+        await this.executeSingleToolCall(toolCall, context, parentSpanId),
+      );
+    }
+    return results;
+  }
 
-      // Record start time for timing
-      const startTime = new Date();
+  /**
+   * Execute a single tool call with span tracking and error handling
+   */
+  private async executeSingleToolCall(
+    toolCall: ToolCall,
+    context: AgentContext,
+    parentSpanId?: string,
+  ): Promise<ToolExecutionSummary> {
+    this.log(`Action: ${toolCall.toolName}`, {
+      parameters: toolCall.arguments,
+    });
 
-      // Check if this tool is an agent-as-tool
-      const tool = this.tools.get(toolCall.toolName);
-      const isAgentTool = tool?.metadata?.["isAgent"] === true;
-      const spanType = isAgentTool ? "🤖 agent" : "🔧 tool";
+    const startTime = new Date();
 
-      // Create span for this tool call
-      const toolSpan = await this.opperClient.createSpan({
-        name: `tool_${toolCall.toolName}`,
-        input: toolCall.arguments,
-        type: spanType,
-        ...(parentSpanId
-          ? { parentSpanId }
-          : context.parentSpanId
-            ? { parentSpanId: context.parentSpanId }
-            : {}),
-      });
+    // Check if this tool is an agent-as-tool
+    const tool = this.tools.get(toolCall.toolName);
+    const isAgentTool = tool?.metadata?.["isAgent"] === true;
+    const spanType = isAgentTool ? "🤖 agent" : "🔧 tool";
 
-      try {
-        // Execute tool via base class method (handles hooks and recording)
-        // Pass tool span ID so nested operations can use it as parent
-        const result = await this.executeTool(
-          toolCall.toolName,
-          toolCall.arguments,
-          context,
-          { spanId: toolSpan.id },
-        );
+    // Create span for this tool call
+    const toolSpan = await this.opperClient.createSpan({
+      name: `tool_${toolCall.toolName}`,
+      input: toolCall.arguments,
+      type: spanType,
+      ...(parentSpanId
+        ? { parentSpanId }
+        : context.parentSpanId
+          ? { parentSpanId: context.parentSpanId }
+          : {}),
+    });
 
-        // Aggregate usage from nested agent tools
-        // This propagates usage statistics from agent-as-tool executions
-        if (result.usage) {
-          context.updateUsageWithSource(toolCall.toolName, result.usage);
-        }
+    try {
+      // Execute tool via base class method (handles hooks and recording)
+      // Pass tool span ID so nested operations can use it as parent
+      const result = await this.executeTool(
+        toolCall.toolName,
+        toolCall.arguments,
+        context,
+        { spanId: toolSpan.id },
+      );
 
-        // Record end time and calculate duration
-        const endTime = new Date();
-        const durationMs = endTime.getTime() - startTime.getTime();
+      // Aggregate usage from nested agent tools
+      // This propagates usage statistics from agent-as-tool executions
+      if (result.usage) {
+        context.updateUsageWithSource(toolCall.toolName, result.usage);
+      }
 
-        // Update tool span with result and timing
-        if (result.success) {
-          this.queueSpanUpdate(context, {
-            spanId: toolSpan.id,
-            output: result.output,
-            startTime,
-            endTime,
-            meta: { durationMs },
-          });
-        } else {
-          this.queueSpanUpdate(context, {
-            spanId: toolSpan.id,
-            error:
-              result.error instanceof Error
-                ? result.error.message
-                : String(result.error),
-            startTime,
-            endTime,
-            meta: { durationMs },
-          });
-        }
+      // Record end time and calculate duration
+      const endTime = new Date();
+      const durationMs = endTime.getTime() - startTime.getTime();
 
-        // Create summary
-        const summary: ToolExecutionSummary = {
-          toolName: toolCall.toolName,
-          success: result.success,
-          ...(result.success && { output: result.output }),
-          ...(!result.success && {
-            error:
-              result.error instanceof Error
-                ? result.error.message
-                : String(result.error),
-          }),
-        };
-
-        results.push(ToolExecutionSummarySchema.parse(summary));
-
-        this.log(
-          `Tool ${toolCall.toolName} ${result.success ? "succeeded" : "failed"}`,
-          {
-            success: result.success,
-            durationMs,
-          },
-        );
-      } catch (error) {
-        // Record end time even on error
-        const endTime = new Date();
-        const durationMs = endTime.getTime() - startTime.getTime();
-
-        // Update span with error and timing
+      // Update tool span with result and timing
+      if (result.success) {
         this.queueSpanUpdate(context, {
           spanId: toolSpan.id,
-          error: error instanceof Error ? error.message : String(error),
+          output: result.output,
           startTime,
           endTime,
           meta: { durationMs },
         });
-
-        // Tool execution threw an error
-        const summary: ToolExecutionSummary = {
-          toolName: toolCall.toolName,
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-
-        results.push(ToolExecutionSummarySchema.parse(summary));
-
-        this.logger.warn(`Tool ${toolCall.toolName} threw error`, {
-          error: error instanceof Error ? error.message : String(error),
-          durationMs,
+      } else {
+        this.queueSpanUpdate(context, {
+          spanId: toolSpan.id,
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+          startTime,
+          endTime,
+          meta: { durationMs },
         });
       }
-    }
 
-    return results;
+      const summary: ToolExecutionSummary = {
+        toolName: toolCall.toolName,
+        success: result.success,
+        ...(result.success && { output: result.output }),
+        ...(!result.success && {
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+        }),
+      };
+
+      this.log(
+        `Tool ${toolCall.toolName} ${result.success ? "succeeded" : "failed"}`,
+        {
+          success: result.success,
+          durationMs,
+        },
+      );
+
+      return ToolExecutionSummarySchema.parse(summary);
+    } catch (error) {
+      const endTime = new Date();
+      const durationMs = endTime.getTime() - startTime.getTime();
+
+      this.queueSpanUpdate(context, {
+        spanId: toolSpan.id,
+        error: error instanceof Error ? error.message : String(error),
+        startTime,
+        endTime,
+        meta: { durationMs },
+      });
+
+      const summary: ToolExecutionSummary = {
+        toolName: toolCall.toolName,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+
+      this.logger.warn(`Tool ${toolCall.toolName} threw error`, {
+        error: error instanceof Error ? error.message : String(error),
+        durationMs,
+      });
+
+      return ToolExecutionSummarySchema.parse(summary);
+    }
   }
 
   /**
