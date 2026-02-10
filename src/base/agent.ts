@@ -119,6 +119,13 @@ export interface BaseAgentConfig<TInput, TOutput> {
   memory?: Memory;
 
   /**
+   * Execute tool calls in parallel when the LLM returns multiple tool calls
+   * in a single response. When false (default), tools execute sequentially.
+   * @default false
+   */
+  parallelToolExecution?: boolean;
+
+  /**
    * Additional metadata for the agent
    */
   metadata?: Record<string, unknown>;
@@ -203,6 +210,11 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
   public readonly enableStreaming: boolean;
 
   /**
+   * Whether to execute tool calls in parallel
+   */
+  public readonly parallelToolExecution: boolean;
+
+  /**
    * Memory instance for persistent storage (null if disabled or initialization failed)
    */
   public readonly memory: Memory | null;
@@ -277,6 +289,7 @@ export abstract class BaseAgent<TInput = unknown, TOutput = unknown> {
     this.outputSchema = config.outputSchema;
     this.enableMemory = config.enableMemory ?? false;
     this.enableStreaming = config.enableStreaming ?? false;
+    this.parallelToolExecution = config.parallelToolExecution ?? false;
     this.metadata = { ...(config.metadata ?? {}) };
 
     this.hooks = new HookManager();

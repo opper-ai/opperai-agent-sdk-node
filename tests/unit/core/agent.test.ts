@@ -306,6 +306,87 @@ describe("Agent", () => {
       expect(capturedContext.executionHistory).toHaveLength(2);
     });
 
+    it("should execute multiple tools in parallel when parallelToolExecution is true", async () => {
+      const executionLog: Array<{ tool: string; event: "start" | "end" }> = [];
+
+      const slowToolA: Tool<{ input: string }, { output: string }> = {
+        name: "tool_a",
+        description: "Slow tool A",
+        execute: async (input) => {
+          executionLog.push({ tool: "tool_a", event: "start" });
+          await new Promise((r) => setTimeout(r, 50));
+          executionLog.push({ tool: "tool_a", event: "end" });
+          return ToolResultFactory.success("tool_a", {
+            output: `A:${input.input}`,
+          });
+        },
+      };
+
+      const slowToolB: Tool<{ input: string }, { output: string }> = {
+        name: "tool_b",
+        description: "Slow tool B",
+        execute: async (input) => {
+          executionLog.push({ tool: "tool_b", event: "start" });
+          await new Promise((r) => setTimeout(r, 50));
+          executionLog.push({ tool: "tool_b", event: "end" });
+          return ToolResultFactory.success("tool_b", {
+            output: `B:${input.input}`,
+          });
+        },
+      };
+
+      const firstDecision = createMockDecision({
+        reasoning: "Need to use both tools",
+        toolCalls: [
+          { id: "call-1", toolName: "tool_a", arguments: { input: "x" } },
+          { id: "call-2", toolName: "tool_b", arguments: { input: "y" } },
+        ],
+      });
+
+      const secondDecision = createMockDecision({
+        reasoning: "Done",
+      });
+
+      const mockFinalResult = { answer: "combined" };
+
+      vi.spyOn(mockOpperClient, "call")
+        .mockResolvedValueOnce({
+          jsonPayload: firstDecision,
+          spanId: "span-1",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: secondDecision,
+          spanId: "span-2",
+          usage: mockUsage(100, 50),
+        })
+        .mockResolvedValueOnce({
+          jsonPayload: mockFinalResult,
+          message: JSON.stringify(mockFinalResult),
+          spanId: "span-3",
+          usage: mockUsage(50, 25),
+        });
+
+      const agent = new Agent({
+        name: "ParallelAgent",
+        tools: [slowToolA, slowToolB],
+        parallelToolExecution: true,
+        opperClient: mockOpperClient,
+      });
+
+      const start = Date.now();
+      await agent.process({ task: "test parallel" });
+      const elapsed = Date.now() - start;
+
+      // Both tools should have started before either finished (parallel)
+      expect(executionLog[0]?.event).toBe("start");
+      expect(executionLog[1]?.event).toBe("start");
+
+      // Should complete faster than sequential (2x50ms) would take
+      // With parallel, both 50ms sleeps overlap
+      expect(elapsed).toBeLessThan(150);
+    });
+
     it("should handle tool not found error", async () => {
       const firstDecision = createMockDecision({
         reasoning: "Trying to use non-existent tool",
