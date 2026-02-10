@@ -5,54 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-## [0.7.1] - 2026-02-09
-
-### Fixed
-
-- Remove duplicate retry logic in agent SDK; delegate HTTP retries (429/5xx) to opper-node with exponential backoff, jitter, and `Retry-After` header support
-- Fix Zod 4 type compatibility with `zod-to-json-schema`
-
-## [0.7.0] - 2026-02-09
-
-### Fixed
-
-- Defer span updates to the end of an agent run to avoid Opper replication race conditions
-
-## [0.6.0] - 2026-02-02
+## [0.8.0] - 2026-02-10
 
 ### Added
 
-- `LlmCallType` union type (`"think" | "final_result"`) replacing `string` on all `callType` hook fields
-- `AgentThought` interface for typed `ThinkEnd` hook payloads (`{ reasoning, userMessage }`)
-- `ExecutionThought` interface for typed `ExecutionCycle.thought` (`{ reasoning, memoryReads?, memoryUpdates? }`)
-- Named payload type exports for all 17 hook events (e.g., `BeforeToolPayload`, `LlmCallPayload`, `StreamChunkPayload`)
-  - Consumers can now `import { BeforeToolPayload }` directly instead of using `HookPayload<typeof HookEvents.BeforeTool>`
-- Narrowed `LlmResponse.response` type to `OpperCallResponse | OpperStreamResponse`
-- Narrowed `StreamChunk.chunkData.delta` type to `string | number | boolean | null | undefined`
+- `parallelToolExecution` config option for running multiple tool calls concurrently via `Promise.all`
+  - Defaults to `false` (sequential) for backward compatibility
+  - When enabled, independent tool calls from a single LLM response execute in parallel
+  - Works with regular tools and agent-as-tool (`asTool()`) compositions
+- New examples: `01c-parallel-tool-execution.ts` and `01d-parallel-agent-as-tool.ts`
 
-### Migration notes
+### Fixed
 
-- Code that casts `thought` to `Record<string, unknown>` will now produce a type error. Use the typed properties directly instead:
+- ESLint `@ts-ignore` replaced with `@ts-expect-error` in schema-utils
+- TypeScript strict indexing error in MCP config test
 
-  ```typescript
-  // Before
-  const reasoning = (thought as Record<string, unknown>)["reasoning"];
+### Changed
 
-  // After
-  const reasoning = thought.reasoning;
-  ```
+- Refactored `executeToolCalls` into `executeSingleToolCall` for cleaner parallel/sequential branching
 
-- `callType` fields in hook payloads are now `LlmCallType` (`"think" | "final_result"`) instead of `string`. Code that assigns `callType` to a `string` variable will need a type annotation update:
+## [0.7.1] - 2026-02-06
 
-  ```typescript
-  // Before
-  const type: string = payload.callType;
+### Fixed
 
-  // After
-  const type: LlmCallType = payload.callType;
-  ```
+- Zod 4 compatibility for schema conversion
+
+### Changed
+
+- Shifted retry mechanism to opper-node client
+
+## [0.7.0] - 2026-02-04
+
+### Added
+
+- Deferred span updates flushed at end of run for better performance
+
+## [0.6.0] - 2026-01-31
+
+### Fixed
+
+- Improved TypeScript types across hook and context systems
 
 ## [0.5.0] - 2026-01-29
 
@@ -132,7 +124,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CommonJS and ESM module support
 - Full TypeScript type definitions
 
-[Unreleased]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.7.1...v0.8.0
+[0.7.1]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/opper-ai/opperai-agent-sdk-node/compare/v0.3.0...v0.4.0
