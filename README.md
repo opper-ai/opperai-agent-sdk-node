@@ -1,9 +1,8 @@
 # Opper Agent SDK (TypeScript)
 
 > [!IMPORTANT]
-> **This SDK is no longer maintained.** Agents are now built into the `opperai` package (`npm install opperai@latest`).
-> See **https://docs.opper.ai** for current best practices on using Opper. The SDKs now live at https://github.com/opper-ai/opper-sdks.
-> This repository is archived and will not receive new patches or releases.
+> **This SDK is no longer maintained.** It is archived and will not receive new patches or releases.
+> See **https://docs.opper.ai** for current best practices on using Opper.
 
 Type‑safe, composable agents for Opper AI in TypeScript using: generics, Zod schemas, modular tools, and modern DX.
 
